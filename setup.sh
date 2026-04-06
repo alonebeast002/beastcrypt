@@ -43,11 +43,12 @@ ok "git found"
 # ── Clone repo ───────────────────────────────────────────────
 INSTALL_DIR="$HOME/.beastcrypt"
 
-if [ -d "$INSTALL_DIR" ]; then
+if [ -d "$INSTALL_DIR/.git" ]; then
     info "Updating existing install..."
     git -C "$INSTALL_DIR" pull --quiet
 else
     info "Cloning beastcrypt..."
+    rm -rf "$INSTALL_DIR"
     git clone --quiet https://github.com/alonebeast002/beastcrypt.git "$INSTALL_DIR"
 fi
 ok "Downloaded to $INSTALL_DIR"
