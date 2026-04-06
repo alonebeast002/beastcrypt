@@ -1,9 +1,8 @@
 # beastcrypt
 
 <p align="center">
-  <img src="banner.jpg" alt="JS Reaper" width="900"/>
+  <img src="banner.jpg" alt="beastcrypt" width="900"/>
 </p>
-
 
 > Wayback Machine file hunter + JS secret scanner — by **ALONE BEAST**
 
@@ -16,7 +15,10 @@
 ## Quick Install
 
 ```bash
-curl -s https://raw.githubusercontent.com/alonebeast002/beastcrypt/main/setup.sh | bash
+git clone https://github.com/alonebeast002/beastcrypt.git
+cd beastcrypt
+chmod +x setup.sh
+./setup.sh
 ```
 
 Then just run:
