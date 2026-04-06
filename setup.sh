@@ -37,6 +37,7 @@ INSTALL_DIR="$HOME/.beastcrypt"
 
 if [ -d "$INSTALL_DIR/.git" ]; then
     info "Updating existing install..."
+    git -C "$INSTALL_DIR" reset --hard HEAD --quiet
     git -C "$INSTALL_DIR" pull --quiet
 else
     info "Cloning beastcrypt..."
@@ -79,12 +80,6 @@ if command -v katana &>/dev/null || [ -f "$HOME/go/bin/katana" ]; then
 else
     warn "Katana not found (optional). Install for live crawling:"
     echo -e "    go install github.com/projectdiscovery/katana/cmd/katana@latest\n"
-fi
-
-SETUP_FILE="$(realpath "$0" 2>/dev/null || echo "")"
-if [ -f "$SETUP_FILE" ] && [[ "$SETUP_FILE" != *".beastcrypt"* ]]; then
-    rm -f "$SETUP_FILE"
-    ok "Setup file deleted"
 fi
 
 echo -e "\n${R}${BLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}"
