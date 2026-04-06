@@ -1,5 +1,10 @@
 # beastcrypt
 
+<p align="center">
+  <img src="banner.jpg" alt="JS Reaper" width="900"/>
+</p>
+
+
 > Wayback Machine file hunter + JS secret scanner — by **ALONE BEAST**
 
 [![Python](https://img.shields.io/badge/Python-3.8+-red?style=flat-square)](https://python.org)
