@@ -11,20 +11,20 @@ import urllib.parse
 from datetime import datetime
 from collections import defaultdict
 
-
+# colours defined before signal bind
 R   = "\033[91m"; G   = "\033[92m"; Y   = "\033[93m"
 B   = "\033[94m"; M   = "\033[95m"; C   = "\033[96m"
 W   = "\033[97m"; DIM = "\033[2m";  BLD = "\033[1m"
 RST = "\033[0m";  HIDE= "\033[?25l"; SHOW= "\033[?25h"
 
-
+# ── Ctrl+C: instant clean exit anywhere ─────────────────────
 def _sigint(sig, frame):
     print(f"\n\n  {Y}[!]{RST} Stopped by user.\n")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, _sigint)
 
-
+# ── Secret patterns ──────────────────────────────────────────
 FP_BLACKLIST = {
     "password","passwd","pwd","secret","token","bearer token","bearer",
     "auth_token","access_token","api_key","apikey","your_password",
@@ -62,7 +62,7 @@ SECRET_PATTERNS = {
     "GraphQL Endpoint": (r'(https?://[^\s\'"<>{}]{5,}/graphql[^\s\'"<>{}]*)',                             1),
 }
 
-
+# ── File-type groups (Mode 1 menu) ───────────────────────────
 FILE_GROUPS = {
     "js":     {"exts": [".js", ".mjs", ".cjs"],                                                "label": "JavaScript",  "color": Y},
     "json":   {"exts": [".json", ".jsonld"],                                                   "label": "JSON",        "color": G},
@@ -79,7 +79,7 @@ FILE_GROUPS = {
     "wasm":   {"exts": [".wasm"],                                                              "label": "WebAssembly", "color": R},
 }
 
-
+# Mode 3 auto-selects only these — text-readable, secret-scannable
 MODE3_EXTS = {
     ".js", ".mjs", ".cjs", ".map",
     ".json", ".jsonld",
@@ -90,6 +90,10 @@ MODE3_EXTS = {
 
 SPIN = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
 
+
+# ════════════════════════════════════════════════════════════
+#  HELPERS
+# ════════════════════════════════════════════════════════════
 
 def tw():
     try:    return os.get_terminal_size().columns
@@ -145,6 +149,10 @@ def _save_json(data, folder, filename):
     ok(f"JSON saved → {G}{path}{RST}")
 
 
+# ════════════════════════════════════════════════════════════
+#  NETWORK
+# ════════════════════════════════════════════════════════════
+
 def curl_get(url, timeout=25, retries=3, raw_url=None):
     referer_base = raw_url or url
     try:
@@ -191,7 +199,7 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
     except: referer = referer_base
 
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
-    
+    # Write status code to a temp file to avoid mixing with binary output
     code_file = dest_path + ".httpcode"
     cmd = [
         "curl", "-s", "-L",
@@ -209,17 +217,21 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
     try:
         result   = subprocess.run(cmd, capture_output=True, timeout=timeout+15)
         code_str = result.stdout.decode("ascii", errors="ignore").strip()
-        
+        # Extract last 3-digit HTTP code (curl -w appends it after body for stdout)
         match = re.search(r'(\d{3})$', code_str)
         code = int(match.group(1)) if match else 0
         return code
     except: return 0
     finally:
-        
+        # Clean up temp code file if it was created
         if os.path.exists(code_file):
             try: os.remove(code_file)
             except: pass
 
+
+# ════════════════════════════════════════════════════════════
+#  BANNER
+# ════════════════════════════════════════════════════════════
 
 def banner():
     ART = [
@@ -251,6 +263,9 @@ def banner():
     print(f"{R}{BLD}{chr(9473)*w}{RST}\n")
 
 
+# ════════════════════════════════════════════════════════════
+#  MENUS
+# ════════════════════════════════════════════════════════════
 
 def main_menu():
     w = tw()
@@ -286,7 +301,7 @@ def filetype_menu():
     raw = input().strip()
 
     if "0" in raw.split():
-        return None 
+        return None  # no filter = all
 
     selected = set()
     for tok in raw.split():
@@ -315,6 +330,9 @@ def ask_output_format():
     return input().strip()
 
 
+# ════════════════════════════════════════════════════════════
+#  WAYBACK CDX — URL discovery
+# ════════════════════════════════════════════════════════════
 
 def cdx_fetch_urls(domain, exts_filter=None, limit=5000):
     """
@@ -368,7 +386,7 @@ def cdx_fetch_urls(domain, exts_filter=None, limit=5000):
             if not url.startswith("http"): continue
             url = url.split("#")[0]
 
-            
+            # Strict client-side extension check
             if exts_filter:
                 url_ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
                 if url_ext not in exts_filter:
@@ -392,6 +410,9 @@ def cdx_fetch_urls(domain, exts_filter=None, limit=5000):
     return result
 
 
+# ════════════════════════════════════════════════════════════
+#  MODE 1 — WAYBACK FILE HUNTER
+# ════════════════════════════════════════════════════════════
 
 def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=False):
     domain    = normalize_domain(domain)
@@ -408,7 +429,7 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
     if not urls:
         err("No URLs found in Wayback for this domain."); return []
 
-    
+    # Breakdown by extension
     by_ext = defaultdict(list)
     for u in urls:
         by_ext[u["ext"] or "no-ext"].append(u)
@@ -440,7 +461,7 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
         sys.stdout.write(f"\r  {DIM}[{i:>{len(str(total))}}/{total}]{RST} {DIM}↓{RST} {orig[:tw()-20]}")
         sys.stdout.flush()
 
-        
+        # Try Wayback snapshot first, then live
         code = curl_download_file(snap, dest, timeout=40, raw_url=orig)
         src  = "WB"
         if code != 200 or not os.path.exists(dest) or os.path.getsize(dest) < 10:
@@ -484,6 +505,9 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
     return report["files"]
 
 
+# ════════════════════════════════════════════════════════════
+#  MODE 2 — JS SECRET SCANNER
+# ════════════════════════════════════════════════════════════
 
 def extract_js_url(raw):
     url = decode_url(raw.strip()).split('#')[0]
@@ -745,6 +769,11 @@ def js_scanner_run(domain, output_dir):
     print(f"\n  {R}{'━'*(w-4)}{RST}\n")
 
 
+# ════════════════════════════════════════════════════════════
+#  MODE 3 — FULL BEAST MODE
+#  No filetype menu — auto uses MODE3_EXTS (secret-relevant)
+#  Then runs JS Scanner on same domain
+# ════════════════════════════════════════════════════════════
 
 def full_beast_mode(domain, output_dir):
     box("FULL BEAST MODE — Wayback Secret Files + JS Scanner", R)
@@ -753,6 +782,10 @@ def full_beast_mode(domain, output_dir):
     wayback_hunter(domain, MODE3_EXTS, output_dir, save_files=True, json_only=False)
     js_scanner_run(domain, output_dir)
 
+
+# ════════════════════════════════════════════════════════════
+#  CLI / ARGPARSE
+# ════════════════════════════════════════════════════════════
 
 def parse_cli():
     p = argparse.ArgumentParser(
@@ -769,12 +802,16 @@ def parse_cli():
     return p.parse_args()
 
 
+# ════════════════════════════════════════════════════════════
+#  MAIN
+# ════════════════════════════════════════════════════════════
+
 def main():
     banner()
     args = parse_cli()
 
-    
-  if args.domain and args.mode:
+    # ── CLI / scripted mode ──────────────────────────────────
+    if args.domain and args.mode:
         domain = args.domain
         mode   = args.mode.strip()
         out    = args.output
