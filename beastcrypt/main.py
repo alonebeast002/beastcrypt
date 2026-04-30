@@ -487,34 +487,46 @@ def cdx_fetch_urls(domain, exts_filter=None, limit=None):
         result.append({"orig": orig, "snap": snap, "ts": ts, "ext": ext})
     return result
 
-def _draw_hunt_box(w, bar_width, target_label, mode_label, pct, i, total, bar, ok_count, f403, f404, short_url):
-    filled  = int(bar_width * pct / 100)
-    bar_str = f"{G}{'█' * filled}{'░' * (bar_width - filled)}{RST}"
-    pad     = w - 2
+def _draw_hunt_box(w, bar_width, target_label, mode_label, pct, i, total, _unused, ok_count, f403, f404, short_url):
+    filled     = int(bar_width * pct / 100)
+    bar_str    = f"{G}{'█' * filled}{'░' * (bar_width - filled)}{RST}"
+    inner      = w - 4
+
+    tgt        = target_label[:28]
+    mode       = mode_label[:20]
+    tgt_plain  = f"  Target: {tgt}  Mode: {mode}"
+    tgt_pad    = max(0, inner - len(tgt_plain))
+
+    prog_plain = f"  [{'█'*filled}{'░'*(bar_width-filled)}] {pct:>3}% ({i}/{total})"
+    prog_pad   = max(0, inner - len(prog_plain))
+
+    stat_pad   = max(0, inner - 34)
+    url_disp   = short_url[:max(0, inner - 26)]
+    url_plain  = f"  CURRENTLY CHECKING: [ {url_disp} ]"
+    url_pad    = max(0, inner - len(url_plain))
 
     lines = [
         f"{R}┌{'─'*(w-2)}┐{RST}",
-        f"{R}│{RST}  {BLD}HUNTING IN PROGRESS...{RST}{' '*(pad-24)}{R}│{RST}",
+        f"{R}│{RST}  {BLD}HUNTING IN PROGRESS...{RST}{' '*(inner-22)}{R}│{RST}",
         f"{R}├{'─'*(w-2)}┤{RST}",
-        f"{R}│{RST}  Target: {W}{BLD}{target_label:<28}{RST}  Mode: {Y}{BLD}{mode_label}{RST}{' '*(max(0, pad - 46 - len(mode_label)))}{R}│{RST}",
-        f"{R}│{RST}{' '*(w-2)}{R}│{RST}",
-        f"{R}│{RST}  [{bar_str}] {BLD}{pct:>3}%{RST} ({i}/{total}){' '*(max(0, pad - bar_width - 16 - len(str(i)) - len(str(total))))}{R}│{RST}",
-        f"{R}│{RST}{' '*(w-2)}{R}│{RST}",
-        f"{R}│{RST}  {W}STATUS SUMMARY:{RST}{' '*(pad-17)}{R}│{RST}",
-        f"{R}│{RST}  {G}● 200 OK (Downloaded){RST}  :  {BLD}{ok_count:<6}{RST}{' '*(max(0, pad-34))}{R}│{RST}",
-        f"{R}│{RST}  {Y}● 403 Forbidden      {RST}  :  {BLD}{f403:<6}{RST}{' '*(max(0, pad-34))}{R}│{RST}",
-        f"{R}│{RST}  {R}● 404 Not Found      {RST}  :  {BLD}{f404:<6}{RST}{' '*(max(0, pad-34))}{R}│{RST}",
-        f"{R}│{RST}{' '*(w-2)}{R}│{RST}",
-        f"{R}│{RST}  {DIM}CURRENTLY CHECKING:{RST} [ {DIM}{short_url[:max(0,pad-25)]}{RST} ]{' '*(max(0, pad - 24 - min(len(short_url), pad-25)))}{R}│{RST}",
+        f"{R}│{RST}  Target: {W}{BLD}{tgt}{RST}  Mode: {Y}{BLD}{mode}{RST}{' '*tgt_pad}{R}│{RST}",
+        f"{R}│{RST}{' '*inner}{R}│{RST}",
+        f"{R}│{RST}  [{bar_str}] {BLD}{pct:>3}%{RST} ({i}/{total}){' '*prog_pad}{R}│{RST}",
+        f"{R}│{RST}{' '*inner}{R}│{RST}",
+        f"{R}│{RST}  {W}STATUS SUMMARY:{RST}{' '*(inner-16)}{R}│{RST}",
+        f"{R}│{RST}  {G}● 200 OK (Downloaded){RST}  :  {BLD}{str(ok_count):<6}{RST}{' '*stat_pad}{R}│{RST}",
+        f"{R}│{RST}  {Y}● 403 Forbidden      {RST}  :  {BLD}{str(f403):<6}{RST}{' '*stat_pad}{R}│{RST}",
+        f"{R}│{RST}  {R}● 404 Not Found      {RST}  :  {BLD}{str(f404):<6}{RST}{' '*stat_pad}{R}│{RST}",
+        f"{R}│{RST}{' '*inner}{R}│{RST}",
+        f"{R}│{RST}  {DIM}CURRENTLY CHECKING:{RST} [ {DIM}{url_disp}{RST} ]{' '*url_pad}{R}│{RST}",
         f"{R}└{'─'*(w-2)}┘{RST}",
     ]
     return lines
 
 def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=False):
     domain    = normalize_domain(domain)
-    clean_dom = re.sub(r'[^\w]', '_', domain.split("://")[-1].rstrip("/"))
-    ts_sfx    = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    folder    = os.path.join(output_dir, f"wayback_{clean_dom}_{ts_sfx}")
+    clean_dom = _strip_domain_tld(domain)
+    folder    = os.path.join(output_dir, f"wayback_{clean_dom}")
 
     info(f"Target     : {BLD}{domain}{RST}")
     info(f"Output dir : {BLD}{folder}/{RST}")
@@ -534,21 +546,46 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
     print()
 
     os.makedirs(folder, exist_ok=True)
-    report     = {"domain": domain, "timestamp": ts_sfx, "files": []}
+    ts_now     = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report     = {"domain": domain, "timestamp": ts_now, "files": []}
     downloaded = 0; failed = 0; f403 = 0; f404 = 0; total = len(urls)
 
     if json_only:
         for u in urls:
             report["files"].append({"url": u["orig"], "snap": u["snap"],
                                     "ts": u["ts"], "ext": u["ext"]})
-        _save_json(report, folder, f"wayback_urls_{clean_dom}_{ts_sfx}.json")
+        _save_json(report, folder, "wayback_urls.json")
         ok("JSON report saved (no files downloaded).")
         return report["files"]
 
+    w_tmp = tw()
+    print(f"\n{R}┌{'─'*(w_tmp-2)}┐{RST}")
+    dl_q = f"  Do you want to download all {total} Wayback files to your local machine?"
+    print(f"{R}│{RST}{W}{BLD}{dl_q:<{w_tmp-2}}{RST}{R}│{RST}")
+    dl_h = "  Type  yes  to download files   |   no  to save URLs only"
+    print(f"{R}│{RST}{DIM}{dl_h:<{w_tmp-2}}{RST}{R}│{RST}")
+    print(f"{R}└{'─'*(w_tmp-2)}┘{RST}")
+    print(f"\n  {R}❯{RST} ", end="", flush=True)
+    dl_ans = input().strip().lower()
+
+    if dl_ans not in ("yes", "y"):
+        info("Saving URLs only — no files will be downloaded.")
+        for u in urls:
+            report["files"].append({"url": u["orig"], "snap": u["snap"],
+                                    "ts": u["ts"], "ext": u["ext"]})
+        # Chota, fixed naam — beast/wayback_urls.txt
+        urls_path = os.path.join(folder, "wayback_urls.txt")
+        with open(urls_path, "w", encoding="utf-8") as f:
+            for u in urls:
+                f.write(u["orig"] + "\n")
+        ok(f"URLs saved → {G}{urls_path}{RST}")
+        return report["files"]
+
     w          = tw()
-    bar_width  = min(36, w - 50)
+    bar_width  = max(10, min(36, w - 50))
     target_lbl = domain.split("://")[-1].rstrip("/")
     mode_lbl   = "Wayback Hunter"
+    # _draw_hunt_box returns exactly 14 lines — cursor up = 14 lines exact
     box_height = 14
 
     for i, u in enumerate(urls, 1):
@@ -557,17 +594,21 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
         if ext and not fname.endswith(ext): fname += ext
         dest  = os.path.join(folder, fname)
 
-        pct       = int(i / total * 100)
-        max_u     = max(1, w - 26)
+        pct       = max(1, int(i / total * 100))
+        max_u     = max(10, w - 26)
         short_url = orig if len(orig) <= max_u else "..." + orig[-(max_u-3):]
 
         lines = _draw_hunt_box(w, bar_width, target_lbl, mode_lbl,
                                pct, i, total, bar_width,
                                downloaded, f403, f404, short_url)
+
         if i == 1:
-            print("\n" + "\n".join(lines))
+            # Pehli baar: ek blank line + box print karo
+            sys.stdout.write("\n" + "\n".join(lines) + "\n")
         else:
-            sys.stdout.write(f"\033[{box_height}A")
+            # box_height = len(lines) = 14 lines
+            # Cursor ko exactly utna upar le jao jitni lines hain
+            sys.stdout.write(f"\033[{len(lines)}A\r")
             sys.stdout.write("\n".join(lines) + "\n")
         sys.stdout.flush()
 
@@ -592,14 +633,17 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
             report["files"].append({"url": orig, "snap": snap, "ts": u["ts"],
                                     "ext": ext, "local": None, "source": None})
 
-    print()
+    # Loop ke baad cursor ko box ke neeche le jao properly
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
     ok(f"Downloaded : {G}{BLD}{downloaded}{RST}  /  {total} total")
     total_fail = failed + f403 + f404
     if total_fail:
         warn(f"Failed     : {Y}{total_fail}{RST}  (403:{f403}  404:{f404}  other:{failed})")
     else:
         ok(f"Failed     : {G}0{RST}")
-    _save_json(report, folder, f"wayback_report_{clean_dom}_{ts_sfx}.json")
+    _save_json(report, folder, "wayback_report.json")
     return report["files"]
 
 def extract_js_url(raw):
@@ -714,8 +758,9 @@ def download_js_and_maps_structured(domain, url_pairs, output_dir):
     total = len(url_pairs)
 
     for i, (orig_url, snap_url) in enumerate(url_pairs, 1):
-        pct = int(i / total * 100)
-        sys.stdout.write(f"\r  {DIM}[{i:>{len(str(total))}}/{total} {pct:>3}%]{RST} {orig_url[:tw()-30]}")
+        pct = max(1, int(i / total * 100))
+        line_txt = f"  [{i:>{len(str(total))}}/{total} {pct:>3}%] {orig_url[:tw()-30]}"
+        sys.stdout.write(f"\r{DIM}{line_txt:<{tw()-1}}{RST}")
         sys.stdout.flush()
 
         js_fname = _url_to_filename(orig_url, ".js")
@@ -797,8 +842,9 @@ def validate_and_download_js(url_pairs, output_dir):
 
     total = len(deduped)
     for i, (orig_url, snap_url) in enumerate(deduped, 1):
-        pct = int(i / total * 100)
-        sys.stdout.write(f"\r  {DIM}[{i:>{len(str(total))}}/{total} {pct:>3}%]{RST} {orig_url[:tw()-25]}")
+        pct = max(1, int(i / total * 100))
+        line_txt = f"  [{i:>{len(str(total))}}/{total} {pct:>3}%] {orig_url[:tw()-25]}"
+        sys.stdout.write(f"\r{DIM}{line_txt:<{tw()-1}}{RST}")
         sys.stdout.flush()
 
         status, body, used_snap = 0, "", False
@@ -921,9 +967,8 @@ def save_url_lists(live_js, live_maps, output_dir):
 
 def js_scanner_run(domain, output_dir):
     domain    = normalize_domain(domain)
-    clean_dom = re.sub(r'[^\w]', '_', domain.split("://")[-1].rstrip("/"))
-    ts_sfx    = datetime.now().strftime("%H%M%S_%f")
-    folder    = os.path.join(output_dir, f"jsreaper_{clean_dom}_{ts_sfx}")
+    clean_dom = _strip_domain_tld(domain)
+    folder    = os.path.join(output_dir, f"jsreaper_{clean_dom}")
 
     info(f"Target     : {BLD}{domain}{RST}")
     info(f"Output dir : {BLD}{folder}/{RST}")
@@ -985,13 +1030,36 @@ def parse_cli():
     p.add_argument("-h",  "--help",      action="store_true")
     return p.parse_args()
 
+def _beastcrypt_only_error():
+    w     = tw()
+    inner = w - 2
+    blank = " " * inner
+    lines = [
+        f"{R}┌{'─'*inner}┐{RST}",
+        f"{R}│{RST}{blank}{R}│{RST}",
+        f"{R}│{RST}{R}{BLD}{'  ⚠  Run only  beastcrypt  command to use this tool':<{inner}}{RST}{R}│{RST}",
+        f"{R}│{RST}{DIM}{'  Usage :  beastcrypt':<{inner}}{RST}{R}│{RST}",
+        f"{R}│{RST}{blank}{R}│{RST}",
+        f"{R}└{'─'*inner}┘{RST}",
+    ]
+    print("\n" + "\n".join(lines) + "\n")
+    sys.exit(0)
+
 def main():
+    if len(sys.argv) > 1:
+        allowed_flags = {"-d","--domain","-o","--output","-m","--mode","-t","--types","--json-only"}
+        for a in sys.argv[1:]:
+            if a.startswith("-") and a not in allowed_flags:
+                # --help ya koi bhi unknown flag → banner + beastcrypt only message
+                os.system("clear")
+                banner()
+                _beastcrypt_only_error()
+
     banner()
     args = parse_cli()
 
-    if args.help or (len(sys.argv) > 1 and not (args.domain and args.mode)):
-        show_help()
-        sys.exit(0)
+    if len(sys.argv) > 1 and not (args.domain and args.mode):
+        _beastcrypt_only_error()
 
     if args.domain and args.mode:
         domain = args.domain
