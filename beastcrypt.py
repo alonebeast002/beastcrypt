@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 
-import subprocess, sys, os, re, json, time, argparse, signal
+import subprocess
+import sys
+import os
+import re
+import json
+import time
+import random
+import argparse
+import signal
 import urllib.parse
 from datetime import datetime
 from collections import defaultdict
@@ -9,6 +17,15 @@ R   = "\033[91m"; G   = "\033[92m"; Y   = "\033[93m"
 B   = "\033[94m"; M   = "\033[95m"; C   = "\033[96m"
 W   = "\033[97m"; DIM = "\033[2m";  BLD = "\033[1m"
 RST = "\033[0m";  HIDE= "\033[?25l"; SHOW= "\033[?25h"
+
+USER_AGENTS = [
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+]
 
 def _sigint(sig, frame):
     print(f"\n\n  {Y}[!]{RST} Stopped by user.\n")
@@ -25,32 +42,34 @@ FP_BLACKLIST = {
 }
 
 SECRET_PATTERNS = {
-    "Google API Key":   (r'AIza[0-9A-Za-z\-_]{35}',                                                        None),
-    "Firebase URL":     (r'https://[a-z0-9-]+\.firebaseio\.com',                                           None),
-    "AWS Access Key":   (r'AKIA[0-9A-Z]{16}',                                                              None),
-    "AWS Secret Key":   (r'(?i)aws[_\-\s]{0,5}secret[_\-\s]{0,10}[\'"]([0-9a-zA-Z/+]{40})[\'"]',         1),
-    "GitHub Token":     (r'(ghp_[0-9a-zA-Z]{36}|github_pat_[0-9a-zA-Z_]{82})',                            1),
-    "Slack Token":      (r'(xox[baprs]-[0-9A-Za-z\-]{10,80})',                                            1),
-    "Stripe Live Key":  (r'(sk_live_[0-9a-zA-Z]{24}|pk_live_[0-9a-zA-Z]{24})',                            1),
-    "Twilio SID":       (r'(AC[a-f0-9]{32})',                                                              1),
-    "Mailgun Key":      (r'(key-[0-9a-zA-Z]{32})',                                                         1),
-    "SendGrid Key":     (r'(SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43})',                                 1),
-    "JWT Token":        (r'(eyJ[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_.+/=]{10,})',         1),
-    "Private Key":      (r'-----BEGIN (?:RSA|EC|DSA|OPENSSH) PRIVATE KEY-----',                            None),
-    "Bearer Token":     (r'(?i)bearer\s+([a-zA-Z0-9\-._~+/]{20,})',                                       1),
-    "Basic Auth":       (r'(?i)basic\s+([a-zA-Z0-9+/=]{20,})',                                            1),
-    "Password in JS":   (r'(?i)(?:password|passwd|pwd)\s*[:=]\s*[\'"]([^\'"]{8,})[\'"]',                  1),
-    "Secret Key in JS": (r'(?i)(?:secret_key|api_secret|client_secret)\s*[:=]\s*[\'"]([^\'"]{10,})[\'"]', 1),
-    "Auth Token in JS": (r'(?i)(?:auth_token|authtoken|access_token)\s*[:=]\s*[\'"]([^\'"]{10,})[\'"]',   1),
-    "Database URL":     (r'((?:mysql|postgres|mongodb|redis)://[^\s\'"<>{},]{10,})',                       1),
-    "S3 Bucket":        (r'([a-z0-9.\-]+\.s3\.amazonaws\.com|s3\.amazonaws\.com/[a-z0-9.\-]+)',            1),
-    "Cloudinary URL":   (r'(cloudinary://[0-9]+:[A-Za-z0-9_\-]+@[a-z]+)',                                 1),
-    "Mapbox Token":     (r'(pk\.eyJ1[0-9A-Za-z._\-]+)',                                                   1),
-    "NPM Token":        (r'(npm_[A-Za-z0-9]{36})',                                                         1),
-    "Heroku API Key":   (r'(?i)heroku.{0,30}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', 1),
-    "Telegram Bot":     (r'([0-9]{8,10}:[A-Za-z0-9_\-]{35})',                                             1),
-    "API Endpoint":     (r'(https?://[^\s\'"<>{}]{5,}/api/v[0-9]+/[^\s\'"<>{}]{3,})',                     1),
-    "GraphQL Endpoint": (r'(https?://[^\s\'"<>{}]{5,}/graphql[^\s\'"<>{}]*)',                             1),
+    "Google API Key":    (r'AIza[0-9A-Za-z\-_]{35}',                                                        None),
+    "Firebase URL":      (r'https://[a-z0-9-]+\.firebaseio\.com',                                           None),
+    "AWS Access Key":    (r'AKIA[0-9A-Z]{16}',                                                              None),
+    "AWS Secret Key":    (r'(?i)aws[_\-\s]{0,5}secret[_\-\s]{0,10}[\'"]([0-9a-zA-Z/+]{40})[\'"]',         1),
+    "GitHub Token":      (r'(ghp_[0-9a-zA-Z]{36}|github_pat_[0-9a-zA-Z_]{82})',                            1),
+    "Slack Token":       (r'(xox[baprs]-[0-9A-Za-z\-]{10,80})',                                            1),
+    "Stripe Live Key":   (r'(sk_live_[0-9a-zA-Z]{24}|pk_live_[0-9a-zA-Z]{24})',                            1),
+    "Twilio SID":        (r'(AC[a-f0-9]{32})',                                                              1),
+    "Mailgun Key":       (r'(key-[0-9a-zA-Z]{32})',                                                         1),
+    "SendGrid Key":      (r'(SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43})',                                 1),
+    "JWT Token":         (r'(eyJ[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_.+/=]{10,})',         1),
+    "Private Key":       (r'-----BEGIN (?:RSA|EC|DSA|OPENSSH) PRIVATE KEY-----',                            None),
+    "Bearer Token":      (r'(?i)bearer\s+([a-zA-Z0-9\-._~+/]{20,})',                                       1),
+    "Basic Auth":        (r'(?i)basic\s+([a-zA-Z0-9+/=]{20,})',                                            1),
+    "Password in JS":    (r'(?i)(?:password|passwd|pwd)\s*[:=]\s*[\'"]([^\'"]{8,})[\'"]',                  1),
+    "Secret Key in JS":  (r'(?i)(?:secret_key|api_secret|client_secret)\s*[:=]\s*[\'"]([^\'"]{10,})[\'"]', 1),
+    "Auth Token in JS":  (r'(?i)(?:auth_token|authtoken|access_token)\s*[:=]\s*[\'"]([^\'"]{10,})[\'"]',   1),
+    "Database URL":      (r'((?:mysql|postgres|mongodb|redis)://[^\s\'"<>{},]{10,})',                       1),
+    "S3 Bucket":         (r'([a-z0-9.\-]+\.s3\.amazonaws\.com|s3\.amazonaws\.com/[a-z0-9.\-]+)',            1),
+    "Cloudinary URL":    (r'(cloudinary://[0-9]+:[A-Za-z0-9_\-]+@[a-z]+)',                                 1),
+    "Mapbox Token":      (r'(pk\.eyJ1[0-9A-Za-z._\-]+)',                                                   1),
+    "NPM Token":         (r'(npm_[A-Za-z0-9]{36})',                                                         1),
+    "Azure Key":         (r'(?i)(?:azure|DefaultEndpointsProtocol).{0,50}AccountKey=([A-Za-z0-9+/=]{60,})',1),
+    "Azure Conn String": (r'DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]+', None),
+    "Heroku API Key":    (r'(?i)heroku[_\-\s]{0,10}(?:api[_\-]?key|token)[_\-\s]{0,5}[=:\'"\s]{1,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', 1),
+    "Telegram Bot":      (r'([0-9]{8,10}:[A-Za-z0-9_\-]{35})',                                             1),
+    "API Endpoint":      (r'(https?://[^\s\'"<>{}]{5,}/api/v[0-9]+/[^\s\'"<>{}]{3,})',                     1),
+    "GraphQL Endpoint":  (r'(https?://[^\s\'"<>{}]{5,}/graphql[^\s\'"<>{}]*)',                              1),
 }
 
 FILE_GROUPS = {
@@ -143,7 +162,7 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
         "curl", "-s", "-L",
         "--max-time", str(timeout), "--compressed", "--retry", "0",
         "-w", "\n__HTTPCODE__%{http_code}",
-        "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+        "-A", random.choice(USER_AGENTS),
         "-H", "Accept: */*",
         "-H", "Accept-Language: en-US,en;q=0.9",
         "-H", "Accept-Encoding: gzip, deflate",
@@ -154,6 +173,10 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
     for attempt in range(1, retries + 1):
         try:
             result = subprocess.run(cmd, capture_output=True, timeout=timeout+10)
+            stderr_out = result.stderr.decode("utf-8", errors="replace").lower()
+            if "permission denied" in stderr_out:
+                warn(f"Permission denied accessing: {url}")
+                return 0, ""
             try:    out = result.stdout.decode("utf-8",    errors="replace")
             except: out = result.stdout.decode("latin-1", errors="replace")
             if "__HTTPCODE__" in out:
@@ -164,12 +187,16 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
                 return code, body
             return 0, ""
         except subprocess.TimeoutExpired:
+            warn(f"Network timeout on attempt {attempt}/{retries}: {url[:80]}")
             if attempt < retries: time.sleep(2)
-        except: return 0, ""
+        except PermissionError:
+            warn(f"Permission error running curl for: {url[:80]}")
+            return 0, ""
+        except Exception:
+            return 0, ""
     return 0, ""
 
 def curl_download_file(url, dest_path, timeout=60, raw_url=None):
-    """Download file directly to disk. Returns HTTP status code."""
     referer_base = raw_url or url
     try:
         parts   = referer_base.split('/')
@@ -183,7 +210,7 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
         "--max-time", str(timeout), "--compressed", "--retry", "0",
         "-o", dest_path,
         "-w", "%{http_code}",
-        "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+        "-A", random.choice(USER_AGENTS),
         "-H", "Accept: */*",
         "-H", "Accept-Language: en-US,en;q=0.9",
         "-H", "Accept-Encoding: gzip, deflate",
@@ -193,11 +220,22 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
     ]
     try:
         result   = subprocess.run(cmd, capture_output=True, timeout=timeout+15)
+        stderr_out = result.stderr.decode("utf-8", errors="replace").lower()
+        if "permission denied" in stderr_out:
+            warn(f"Permission denied downloading: {url[:80]}")
+            return 0
         code_str = result.stdout.decode("ascii", errors="ignore").strip()
         match = re.search(r'(\d{3})$', code_str)
         code = int(match.group(1)) if match else 0
         return code
-    except: return 0
+    except subprocess.TimeoutExpired:
+        warn(f"Download timeout: {url[:80]}")
+        return 0
+    except PermissionError:
+        warn(f"Permission error downloading: {url[:80]}")
+        return 0
+    except Exception:
+        return 0
     finally:
         if os.path.exists(code_file):
             try: os.remove(code_file)
@@ -250,7 +288,6 @@ def main_menu():
     return input().strip()
 
 def filetype_menu():
-    """Mode 1 only. Returns set of extensions or None (=all)."""
     box("SELECT FILE TYPES TO DOWNLOAD", R)
     print(f"  {DIM}Space-separated numbers  |  0 = ALL FILES{RST}\n")
 
@@ -265,7 +302,7 @@ def filetype_menu():
     raw = input().strip()
 
     if "0" in raw.split():
-        return None  # no filter = all
+        return None
 
     selected = set()
     for tok in raw.split():
@@ -293,12 +330,6 @@ def ask_output_format():
     return input().strip()
 
 def cdx_fetch_urls(domain, exts_filter=None, limit=5000):
-    """
-    Query Wayback CDX for archived URLs.
-    exts_filter : set of extensions → one strict CDX query per ext + client-side check
-                  None              → fetch everything (no filter)
-    Returns list of dicts {orig, snap, ts, ext}
-    """
     clean  = domain.split("://")[-1].rstrip("/")
     url_ts = {}
     spin_i = 0
@@ -519,29 +550,68 @@ def fetch_wayback_js(domain):
         result.append((orig, snap))
     return result
 
+def ask_katana():
+    w = tw()
+    print(f"\n{R}┌{'─'*(w-2)}┐{RST}")
+    print(f"{R}│ {BLD}{'KATANA CRAWL':^{w-4}}{RST}{R} │{RST}")
+    print(f"{R}└{'─'*(w-2)}┘{RST}")
+    print(f"\n  {W}Also scan with {BLD}Katana{RST}{W} (live JS crawler)?{RST}")
+    print(f"  {G}[yes]{RST}  Run Katana alongside Wayback")
+    print(f"  {DIM}[no] {RST}  Skip Katana, use Wayback only\n")
+    print(f"  {R}❯{RST} ", end="", flush=True)
+    ans = input().strip().lower()
+    return ans in ("yes", "y")
+
 def fetch_katana_js(domain):
     box(f"KATANA — {domain}", R)
     katana_path = os.path.expanduser("~/go/bin/katana")
     if not os.path.isfile(katana_path):
-        warn("Katana not found at ~/go/bin/katana — skipping"); return []
-    info("Running Katana (depth 3, JS crawl mode)...")
+        print(f"\n  {R}┌─[✘] KATANA NOT FOUND{RST}")
+        print(f"  {R}│{RST}  Path : {DIM}~/go/bin/katana{RST}")
+        print(f"  {R}│{RST}  Fix  : {W}go install github.com/projectdiscovery/katana/cmd/katana@latest{RST}")
+        print(f"  {R}└─ Skipping Katana.{RST}\n")
+        return []
+    info(f"Katana crawling {BLD}{domain}{RST} — depth 3, JS mode ...")
     try:
         result = subprocess.run(
             [katana_path, "-u", domain, "-jc", "-d", "3", "-silent", "-nc"],
-            capture_output=True, text=True, timeout=180, errors="ignore"
+            capture_output=True, timeout=180
         )
+        raw_out = result.stdout.decode("utf-8", errors="replace")
         seen, pairs = set(), []
-        for line in result.stdout.splitlines():
-            u = extract_js_url(line.strip())
+        for line in raw_out.splitlines():
+            line = line.strip()
+            if not line or not line.startswith("http"):
+                continue
+            u = extract_js_url(line)
             if u and u not in seen:
                 seen.add(u); pairs.append((u, None))
         ok(f"Katana found {G}{BLD}{len(pairs)}{RST} JS URLs")
         if not pairs:
-            warn("No JS from Katana — sample:")
-            for l in result.stdout.splitlines()[:8]: print(f"    {DIM}{l}{RST}")
+            stderr_peek = result.stderr.decode("utf-8", errors="replace").strip()
+            print(f"\n  {R}┌─[!] KATANA — No JS URLs found{RST}")
+            if stderr_peek:
+                for line in stderr_peek.splitlines()[:4]:
+                    print(f"  {R}│{RST}  {DIM}{line[:tw()-8]}{RST}")
+            print(f"  {R}└─ Check that the target is reachable.{RST}\n")
         return pairs
-    except FileNotFoundError:         warn("Katana not executable — skipping"); return []
-    except subprocess.TimeoutExpired: warn("Katana timed out"); return []
+    except FileNotFoundError:
+        print(f"\n  {R}┌─[✘] KATANA — Binary not executable{RST}")
+        print(f"  {R}└─ Skipping.{RST}\n")
+        return []
+    except subprocess.TimeoutExpired:
+        print(f"\n  {R}┌─[✘] KATANA — Timed out after 180s{RST}")
+        print(f"  {R}└─ Partial results discarded, continuing.{RST}\n")
+        return []
+    except PermissionError:
+        print(f"\n  {R}┌─[✘] KATANA — Permission denied running binary{RST}")
+        print(f"  {R}└─ Check execute permissions: chmod +x ~/go/bin/katana{RST}\n")
+        return []
+    except Exception as e:
+        print(f"\n  {R}┌─[✘] KATANA — Unexpected error{RST}")
+        print(f"  {R}│{RST}  {DIM}{str(e)[:tw()-8]}{RST}")
+        print(f"  {R}└─ Skipping Katana.{RST}\n")
+        return []
 
 def validate_and_download_js(url_pairs, output_dir):
     box("DOWNLOADING JS + .map probe", R)
@@ -669,7 +739,7 @@ def save_url_lists(live_js, live_maps, output_dir):
     ok(f"JS  URLs → {G}{js_path}{RST}")
     ok(f"Map URLs → {M}{map_path}{RST}")
 
-def js_scanner_run(domain, output_dir):
+def js_scanner_run(domain, output_dir, use_katana=None):
     domain    = normalize_domain(domain)
     clean_dom = re.sub(r'[^\w]', '_', domain.split("://")[-1].rstrip("/"))
     ts_sfx    = datetime.now().strftime("%H%M%S")
@@ -678,8 +748,14 @@ def js_scanner_run(domain, output_dir):
     info(f"Target     : {BLD}{domain}{RST}")
     info(f"Output dir : {BLD}{folder}/{RST}")
 
+    if use_katana is None:
+        use_katana = ask_katana()
+
     wb_pairs     = fetch_wayback_js(domain)
-    katana_pairs = fetch_katana_js(domain)
+    katana_pairs = fetch_katana_js(domain) if use_katana else []
+
+    if not use_katana:
+        info(f"Katana {DIM}skipped by user.{RST}")
 
     merged = {}
     for o, s in katana_pairs: merged[o] = s
@@ -716,26 +792,33 @@ def full_beast_mode(domain, output_dir):
     box("FULL BEAST MODE — Wayback Secret Files + JS Scanner", R)
     exts_str = "  ".join(sorted(MODE3_EXTS))
     info(f"Auto file types: {DIM}{exts_str}{RST}")
+    use_katana = ask_katana()
     wayback_hunter(domain, MODE3_EXTS, output_dir, save_files=True, json_only=False)
-    js_scanner_run(domain, output_dir)
+    js_scanner_run(domain, output_dir, use_katana=use_katana)
 
 def parse_cli():
-    p = argparse.ArgumentParser(
-        description="BEAST v1.1 — Wayback Hunter + JS Secret Scanner  (by ALONE BEAST)",
-        add_help=True
-    )
-    p.add_argument("-d",  "--domain",   metavar="DOMAIN", help="Target domain")
-    p.add_argument("-o",  "--output",   metavar="DIR",    default="beast_output", help="Output directory")
-    p.add_argument("-m",  "--mode",     metavar="N",      help="1=Wayback  2=JS Scanner  3=Full Beast")
-    p.add_argument("-t",  "--types",    metavar="TYPES",
-                   help="Comma-separated types (Mode 1 only): js,json,pdf,zip,xml,csv,sql,config,html,img,map,txt,wasm,all")
-    p.add_argument("--json-only",       action="store_true",
-                   help="Mode 1: save JSON report only, skip file download")
-    return p.parse_args()
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("-d",  "--domain",   metavar="DOMAIN")
+    p.add_argument("-o",  "--output",   metavar="DIR",   default="beast_output")
+    p.add_argument("-m",  "--mode",     metavar="N")
+    p.add_argument("-t",  "--types",    metavar="TYPES")
+    p.add_argument("--json-only",       action="store_true")
+    args, unknown = p.parse_known_args()
+    if unknown or (len(sys.argv) > 1 and not args.domain):
+        banner()
+        w = tw()
+        print(f"\n{R}\u250c{chr(9472)*(w-2)}\u2510{RST}")
+        print(f"{R}\u2502 {BLD}{'USAGE ERROR':^{w-4}}{RST}{R} \u2502{RST}")
+        print(f"{R}\u2514{chr(9472)*(w-2)}\u2518{RST}\n")
+        print(f"  {W}Just run without flags and use the interactive menu:{RST}\n")
+        print(f"  {G}\u276f{RST}  {BLD}python3 beastcrypt.py{RST}\n")
+        print(f"  {R}{chr(9473)*(w-4)}{RST}\n")
+        sys.exit(0)
+    return args
 
 def main():
-    banner()
     args = parse_cli()
+    banner()
 
     if args.domain and args.mode:
         domain = args.domain
