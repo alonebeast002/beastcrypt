@@ -1,0 +1,6 @@
+# beastcrypt uses Python stdlib only + system curl
+# No pip dependencies required
+#
+# System dependencies (install manually):
+#   curl        — required  (apt install curl / pkg install curl)
+#   katana      — optional  (go install github.com/projectdiscovery/katana/cmd/katana@latest)
