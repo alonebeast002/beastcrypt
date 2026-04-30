@@ -28,12 +28,7 @@ Requires Python 3.8+ and `curl`. Optional: [Katana](https://github.com/projectdi
 
 ```bash
 beastcrypt                                     # interactive menu (recommended)
-beastcrypt -d example.com -m 1                # Wayback file hunter
-beastcrypt -d example.com -m 1 -t js,json     # Wayback — specific file types
-beastcrypt -d example.com -m 1 --json-only    # URL report only, no download
-beastcrypt -d example.com -m 2                # JS secret scanner
-beastcrypt -d example.com -m 3                # full beast mode
-beastcrypt --help                             # detailed help
+
 ```
 
 | Mode | Description |
