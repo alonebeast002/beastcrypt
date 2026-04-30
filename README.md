@@ -27,7 +27,7 @@ Requires Python 3.8+ and `curl`. Optional: [Katana](https://github.com/projectdi
 ## Usage
 
 ```bash
-beastcrypt                                     # interactive menu (recommended)
+beastcrypt       # interactive menu only (recommended)
 
 ```
 
