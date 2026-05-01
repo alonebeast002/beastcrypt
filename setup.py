@@ -9,9 +9,9 @@ with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
 setup(
     # ── Package identity ────────────────────────────────────────────────────
     name             = "beastcrypt",          # PyPI pe yahi naam aayega
-    version          = "1.2.0",
+    version          = "1.2.1",
     author           = "ALONE BEAST",
-    author_email     = "alonebeast@proton.me",  # apna email daal dena
+    author_email     = "ytthumbpro@gmail.com",  # apna email daal dena
     description      = "Wayback Hunter + JS Secret Scanner — by ALONE BEAST",
     long_description = long_description,
     long_description_content_type = "text/markdown",
