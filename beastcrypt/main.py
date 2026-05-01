@@ -408,7 +408,7 @@ def banner():
         r"  ██████╔╝███████╗██║  ██║███████║   ██║   ",
         r"  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝  ",
     ]
-    FALLBACK = "  BEAST v1.2"
+    FALLBACK = "  BEAST v1.2.2"
     w        = tw()
     art_w    = max(len(l) for l in ART)
 
