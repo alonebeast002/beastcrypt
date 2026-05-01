@@ -31,10 +31,19 @@ CDX_LIMIT_JS   = int(os.environ.get("CDX_LIMIT_JS",  "10000"))
 CDX_LIMIT_ALL  = int(os.environ.get("CDX_LIMIT_ALL", "5000"))
 
 def _sigint(sig, frame):
-    print(f"\n\n  {Y}[-]{RST} Interrupted by user.\n")
-    sys.exit(0)
+    global _prog_lines
+    if _prog_lines > 0:
+        sys.stdout.write(f"\033[{_prog_lines}A\r")
+        for _ in range(_prog_lines):
+            sys.stdout.write("\033[2K\n")
+        sys.stdout.write(f"\033[{_prog_lines}A\r")
+        sys.stdout.flush()
+        _prog_lines = 0
+    print(f"\n  {Y}[-]{RST} Interrupted by user.\n")
+    os._exit(0)
 
 signal.signal(signal.SIGINT, _sigint)
+signal.signal(signal.SIGTERM, _sigint)
 
 FP_BLACKLIST = {
     "password","passwd","pwd","secret","token","bearer token","bearer",
@@ -106,7 +115,7 @@ _prog_lines = 0
 def tw():
     try:
         return max(50, min(os.get_terminal_size().columns, 120))
-    except:
+    except Exception:
         return 80
 
 def _clear_prev(n):
@@ -272,7 +281,7 @@ def decode_url(url):
         prev = None
         while prev != url:
             prev = url; url = urllib.parse.unquote(url)
-    except:
+    except Exception:
         pass
     return url.strip()
 
@@ -329,7 +338,7 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
     try:
         parts   = referer_base.split('/')
         referer = parts[0] + '//' + parts[2] + '/'
-    except:
+    except Exception:
         referer = referer_base
 
     cmd = [
@@ -353,7 +362,7 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
             if "permission denied" in stderr_out:
                 return 0, ""
             try:    out = result.stdout.decode("utf-8",    errors="replace")
-            except: out = result.stdout.decode("latin-1", errors="replace")
+            except Exception: out = result.stdout.decode("latin-1", errors="replace")
             if "__HTTPCODE__" in out:
                 body, code_str = out.rsplit("__HTTPCODE__", 1)
                 code = int(code_str.strip()) if code_str.strip().isdigit() else 0
@@ -361,9 +370,11 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
                     time.sleep(2 ** attempt); continue
                 return code, body
             return 0, ""
+        except KeyboardInterrupt:
+            raise
         except subprocess.TimeoutExpired:
             if attempt < retries: time.sleep(2)
-        except:
+        except Exception:
             return 0, ""
     return 0, ""
 
@@ -372,7 +383,7 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
     try:
         parts   = referer_base.split('/')
         referer = parts[0] + '//' + parts[2] + '/'
-    except:
+    except Exception:
         referer = referer_base
 
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
@@ -396,7 +407,9 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
         code_str = result.stdout.decode("ascii", errors="ignore").strip()
         match    = re.search(r'(\d{3})$', code_str)
         return int(match.group(1)) if match else 0
-    except:
+    except KeyboardInterrupt:
+        raise
+    except Exception:
         return 0
 
 def banner():
@@ -616,9 +629,13 @@ def ensure_katana(on_update=None):
         if on_update: on_update(i, total, msg)
         try:
             subprocess.run(cmd, capture_output=True, timeout=300)
+        except KeyboardInterrupt:
+            raise
         except FileNotFoundError:
             return None
         except subprocess.TimeoutExpired:
+            return None
+        except Exception:
             return None
         time.sleep(0.5)
 
@@ -705,6 +722,8 @@ def fetch_katana_js(domain):
         ok(f"Katana found  {G}{BLD}{len(pairs)}{RST}  JS/Map URLs")
         print()
         return pairs
+    except KeyboardInterrupt:
+        raise
     except FileNotFoundError:
         warn("Katana not executable  --  skipping"); return []
     except subprocess.TimeoutExpired:
@@ -799,7 +818,9 @@ def _download_js_core(url_pairs, js_dir, map_dir, label):
                         snap_map = (f"http://web.archive.org/web/{m.group(1)}if_/{enc_map}"
                                     if m else snap_url.split("if_/")[0] + "if_/" + enc_map)
                         ms, mb   = curl_get(snap_map, timeout=25, raw_url=map_url)
-                    except: ms, mb = 0, ""
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception: ms, mb = 0, ""
 
                 if ms == 200 and len(mb.strip()) > 10:
                     mb        = _strip_wayback(mb)
@@ -838,7 +859,7 @@ def validate_and_download_js(url_pairs, output_dir):
     def _read(path):
         try:
             with open(path, encoding="utf-8", errors="ignore") as f: return f.read()
-        except: return ""
+        except Exception: return ""
 
     live_js   = [(r["orig_url"], r["local_path"], _read(r["local_path"]))
                   for r in js_records if r["local_path"] and os.path.exists(r["local_path"])]
@@ -872,7 +893,7 @@ def scan_secrets(live_js, live_maps, output_dir, domain):
         file_seen = set()
         for label, (pattern, group) in SECRET_PATTERNS.items():
             try:    matches = re.findall(pattern, content)
-            except: continue
+            except Exception: continue
             for match in matches:
                 if group is None:
                     val = match if isinstance(match, str) else match[0]
@@ -1117,7 +1138,7 @@ def direct_js_map_fetcher(domain, output_dir):
     def _read(path):
         try:
             with open(path, encoding="utf-8", errors="ignore") as f: return f.read()
-        except: return ""
+        except Exception: return ""
 
     live_js   = [(r["orig_url"], r["local_path"], _read(r["local_path"]))
                   for r in js_records if r["local_path"] and os.path.exists(r["local_path"])]
@@ -1246,54 +1267,58 @@ def main():
     if len(sys.argv) > 1 and not (args.domain and args.mode):
         _usage_error()
 
-    if args.domain and args.mode:
-        domain = args.domain; mode = args.mode.strip(); out = args.output
-        exts_filter = None
-        if args.types and args.types.lower() != "all":
-            exts_filter = set()
-            for t in args.types.split(","):
-                t = t.strip().lower()
-                if t in FILE_GROUPS: exts_filter.update(FILE_GROUPS[t]["exts"])
+    try:
+        if args.domain and args.mode:
+            domain = args.domain; mode = args.mode.strip(); out = args.output
+            exts_filter = None
+            if args.types and args.types.lower() != "all":
+                exts_filter = set()
+                for t in args.types.split(","):
+                    t = t.strip().lower()
+                    if t in FILE_GROUPS: exts_filter.update(FILE_GROUPS[t]["exts"])
 
-        if   mode == "1": wayback_katana_hunter(domain, out)
-        elif mode == "2": direct_js_map_fetcher(domain, out)
-        elif mode == "3": secret_scanner_mode(out)
-        else:             err(f"Unknown mode '{mode}'  --  valid: 1 / 2 / 3")
-        return
+            if   mode == "1": wayback_katana_hunter(domain, out)
+            elif mode == "2": direct_js_map_fetcher(domain, out)
+            elif mode == "3": secret_scanner_mode(out)
+            else:             err(f"Unknown mode '{mode}'  --  valid: 1 / 2 / 3")
+            return
 
-    while True:
-        choice = main_menu()
+        while True:
+            choice = main_menu()
 
-        if choice == "0":
-            print(f"\n  {DIM}Exiting.{RST}\n"); sys.exit(0)
+            if choice == "0":
+                print(f"\n  {DIM}Exiting.{RST}\n"); sys.exit(0)
 
-        elif choice == "1":
-            domain     = get_domain_input()
-            output_dir = get_output_dir()
+            elif choice == "1":
+                domain     = get_domain_input()
+                output_dir = get_output_dir()
+                os.system("clear"); banner()
+                wayback_katana_hunter(domain, output_dir)
+
+            elif choice == "2":
+                domain     = get_domain_input()
+                output_dir = get_output_dir()
+                os.system("clear"); banner()
+                direct_js_map_fetcher(domain, output_dir)
+
+            elif choice == "3":
+                output_dir = get_output_dir()
+                os.system("clear"); banner()
+                secret_scanner_mode(output_dir)
+
+            else:
+                warn("Invalid choice."); continue
+
+            print()
+            _sep(R)
+            print(f"{R}{BLD}{'  DONE  --  ALONE BEAST'.center(tw())}{RST}")
+            _sep(R)
+            print(f"\n  {DIM}Press Enter to return to menu ...{RST}")
+            input()
             os.system("clear"); banner()
-            wayback_katana_hunter(domain, output_dir)
 
-        elif choice == "2":
-            domain     = get_domain_input()
-            output_dir = get_output_dir()
-            os.system("clear"); banner()
-            direct_js_map_fetcher(domain, output_dir)
-
-        elif choice == "3":
-            output_dir = get_output_dir()
-            os.system("clear"); banner()
-            secret_scanner_mode(output_dir)
-
-        else:
-            warn("Invalid choice."); continue
-
-        print()
-        _sep(R)
-        print(f"{R}{BLD}{'  DONE  --  ALONE BEAST'.center(tw())}{RST}")
-        _sep(R)
-        print(f"\n  {DIM}Press Enter to return to menu ...{RST}")
-        input()
-        os.system("clear"); banner()
+    except KeyboardInterrupt:
+        _sigint(None, None)
 
 if __name__ == "__main__":
     main()
