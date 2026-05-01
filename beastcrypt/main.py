@@ -12,10 +12,11 @@ import urllib.parse
 from datetime import datetime
 from collections import defaultdict
 
+# ── COLORS ─────────────────────────────────────────────────────────────────────
 R   = "\033[91m"; G   = "\033[92m"; Y   = "\033[93m"
 B   = "\033[94m"; M   = "\033[95m"; C   = "\033[96m"
 W   = "\033[97m"; DIM = "\033[2m";  BLD = "\033[1m"
-RST = "\033[0m";  HIDE= "\033[?25l"; SHOW= "\033[?25h"
+RST = "\033[0m"
 
 USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
@@ -31,11 +32,12 @@ CDX_LIMIT_JS   = int(os.environ.get("CDX_LIMIT_JS",  "10000"))
 CDX_LIMIT_ALL  = int(os.environ.get("CDX_LIMIT_ALL", "5000"))
 
 def _sigint(sig, frame):
-    print(f"\n\n  {Y}[!]{RST} Stopped by user.\n")
+    print(f"\n\n  {Y}[-]{RST} Interrupted by user.\n")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, _sigint)
 
+# ── BLACKLISTS / PATTERNS ──────────────────────────────────────────────────────
 FP_BLACKLIST = {
     "password","passwd","pwd","secret","token","bearer token","bearer",
     "auth_token","access_token","api_key","apikey","your_password",
@@ -99,22 +101,166 @@ MODE3_EXTS = {
     ".txt", ".log", ".xml",
 }
 
-SPIN = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
+# ── TERMINAL UTILS ─────────────────────────────────────────────────────────────
+
+SPIN_FRAMES = ["|", "/", "-", "\\"]
+_spin_idx   = 0
+_prog_lines = 0
 
 def tw():
-    try:    return os.get_terminal_size().columns
-    except: return 110
+    try:
+        return max(50, min(os.get_terminal_size().columns, 120))
+    except:
+        return 80
 
-def info(m): print(f"  {C}[*]{RST} {m}")
-def ok(m):   print(f"  {G}[✔]{RST} {m}")
-def warn(m): print(f"  {Y}[!]{RST} {m}")
-def err(m):  print(f"  {R}[✘]{RST} {m}")
+def _clear_prev(n):
+    if n > 0:
+        sys.stdout.write(f"\033[{n}A\r")
 
-def box(title, color=R):
-    w = tw(); inner = w - 4
-    print(f"\n{color}┌{'─'*(w-2)}┐{RST}")
-    print(f"{color}│ {BLD}{title[:inner]:<{inner}}{RST}{color}│{RST}")
-    print(f"{color}└{'─'*(w-2)}┘{RST}")
+def _erase_line():
+    sys.stdout.write("\033[2K\r")
+
+def _reset_progress():
+    global _prog_lines
+    _prog_lines = 0
+
+def _print_progress_block(lines):
+    global _prog_lines
+    _clear_prev(_prog_lines)
+    for line in lines:
+        _erase_line()
+        print(line)
+    _prog_lines = len(lines)
+    sys.stdout.flush()
+
+# ── PRINT HELPERS ──────────────────────────────────────────────────────────────
+
+def info(m): print(f"  {C}  *  {RST}{m}")
+def ok(m):   print(f"  {G}  +  {RST}{m}")
+def warn(m): print(f"  {Y}  !  {RST}{m}")
+def err(m):  print(f"  {R}  x  {RST}{m}")
+
+def _sep(color=R, char="-"):
+    w = tw()
+    print(f"{color}{char * w}{RST}")
+
+def _section_header(title, color=R):
+    w = tw()
+    print()
+    _sep(color)
+    print(f"{color}{BLD}  {title}{RST}")
+    _sep(color)
+    print()
+
+def _progress_bar(current, total, width=30):
+    pct    = int(current / max(1, total) * 100)
+    filled = int(width * pct / 100)
+    bar    = f"{G}{'#' * filled}{DIM}{'.' * (width - filled)}{RST}"
+    return bar, f"{pct:>3}%"
+
+# ── PROGRESS DISPLAYS ──────────────────────────────────────────────────────────
+# Every function prints exactly 10 lines so _prog_lines stays consistent.
+
+def show_cdx_progress(target, ext_label, ext_idx, total_exts, found, offset, status):
+    global _spin_idx
+    _spin_idx = (_spin_idx + 1) % len(SPIN_FRAMES)
+    spin     = SPIN_FRAMES[_spin_idx]
+    bar, pct = _progress_bar(ext_idx, total_exts, 30)
+    w        = tw()
+    tgt      = target[:w - 20]
+    lbl      = ext_label[:16]
+    stat     = status[:max(10, w - 20)]
+
+    lines = [
+        f"",
+        f"  {R}{BLD}  WAYBACK CDX  {RST}{DIM}  [{spin}]{RST}",
+        f"",
+        f"  {DIM}  Target    {RST}  {W}{BLD}{tgt}{RST}",
+        f"  {DIM}  Type      {RST}  {Y}{BLD}{lbl}{RST}",
+        f"  {DIM}  Progress  {RST}  [{bar}{RST}]  {Y}{BLD}{pct}{RST}  {DIM}({ext_idx}/{total_exts}){RST}",
+        f"  {DIM}  Found     {RST}  {G}{BLD}{found}{RST}  {DIM}urls   offset={offset}{RST}",
+        f"  {DIM}  Status    {RST}  {DIM}{stat}{RST}",
+        f"",
+        f"",
+    ]
+    _print_progress_block(lines)
+
+
+def show_hunt_progress(target, current, total, ok_count, f403, f404, url):
+    global _spin_idx
+    _spin_idx = (_spin_idx + 1) % len(SPIN_FRAMES)
+    spin     = SPIN_FRAMES[_spin_idx]
+    bar, pct = _progress_bar(current, total, 30)
+    w        = tw()
+    tgt      = target[:w - 20]
+    u        = url if len(url) <= w - 16 else url[:w - 19] + "..."
+
+    lines = [
+        f"",
+        f"  {R}{BLD}  DOWNLOADING  {RST}{DIM}  [{spin}]{RST}",
+        f"",
+        f"  {DIM}  Target    {RST}  {W}{BLD}{tgt}{RST}",
+        f"  {DIM}  Progress  {RST}  [{bar}{RST}]  {Y}{BLD}{pct}{RST}  {DIM}({current}/{total}){RST}",
+        f"",
+        f"  {G}  200 OK    {RST}  {BLD}{ok_count:<6}{RST}  {Y}  403  {RST}{BLD}{f403:<6}{RST}  {R}  404  {RST}{BLD}{f404}{RST}",
+        f"",
+        f"  {DIM}  URL       {RST}  {DIM}{u}{RST}",
+        f"",
+    ]
+    _print_progress_block(lines)
+
+
+def show_js_download_progress(target, current, total, ok_count, fail_count, url):
+    global _spin_idx
+    _spin_idx = (_spin_idx + 1) % len(SPIN_FRAMES)
+    spin     = SPIN_FRAMES[_spin_idx]
+    bar, pct = _progress_bar(current, total, 30)
+    w        = tw()
+    tgt      = target[:w - 20]
+    u        = url if len(url) <= w - 16 else url[:w - 19] + "..."
+
+    lines = [
+        f"",
+        f"  {C}{BLD}  JS SCANNER  {RST}{DIM}  [{spin}]{RST}",
+        f"",
+        f"  {DIM}  Target    {RST}  {W}{BLD}{tgt}{RST}",
+        f"  {DIM}  Progress  {RST}  [{bar}{RST}]  {Y}{BLD}{pct}{RST}  {DIM}({current}/{total}){RST}",
+        f"",
+        f"  {G}  Saved     {RST}  {BLD}{ok_count:<6}{RST}  {R}  Failed  {RST}{BLD}{fail_count}{RST}",
+        f"",
+        f"  {DIM}  File      {RST}  {DIM}{u}{RST}",
+        f"",
+    ]
+    _print_progress_block(lines)
+
+
+def show_secret_progress(target, current, total, secrets_found, fname):
+    global _spin_idx
+    _spin_idx = (_spin_idx + 1) % len(SPIN_FRAMES)
+    spin     = SPIN_FRAMES[_spin_idx]
+    bar, pct = _progress_bar(current, total, 30)
+    tgt      = target[:60]
+    fn       = fname[:60]
+
+    lines = [
+        f"",
+        f"  {M}{BLD}  SECRET SCAN  {RST}{DIM}  [{spin}]{RST}",
+        f"",
+        f"  {DIM}  Target    {RST}  {W}{BLD}{tgt}{RST}",
+        f"  {DIM}  Progress  {RST}  [{bar}{RST}]  {Y}{BLD}{pct}{RST}  {DIM}({current}/{total}){RST}",
+        f"",
+        f"  {R}  Secrets   {RST}  {BLD}{secrets_found}{RST}  {DIM}found so far{RST}",
+        f"",
+        f"  {DIM}  File      {RST}  {DIM}{fn}{RST}",
+        f"",
+    ]
+    _print_progress_block(lines)
+
+# ── PAGE SIZE ──────────────────────────────────────────────────────────────────
+
+PAGE_SIZE = 500
+
+# ── URL / STRING UTILS ─────────────────────────────────────────────────────────
 
 def decode_url(url):
     url = url.strip()
@@ -122,7 +268,8 @@ def decode_url(url):
         prev = None
         while prev != url:
             prev = url; url = urllib.parse.unquote(url)
-    except: pass
+    except:
+        pass
     return url.strip()
 
 def normalize_domain(domain):
@@ -171,14 +318,17 @@ def _save_json(data, folder, filename):
     path = os.path.join(folder, filename)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    ok(f"JSON saved → {G}{path}{RST}")
+    ok(f"Saved  {G}{path}{RST}")
+
+# ── NETWORK ────────────────────────────────────────────────────────────────────
 
 def curl_get(url, timeout=25, retries=3, raw_url=None):
     referer_base = raw_url or url
     try:
         parts   = referer_base.split('/')
         referer = parts[0] + '//' + parts[2] + '/'
-    except: referer = referer_base
+    except:
+        referer = referer_base
 
     cmd = [
         "curl", "-s", "-L",
@@ -196,10 +346,9 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
     ]
     for attempt in range(1, retries + 1):
         try:
-            result = subprocess.run(cmd, capture_output=True, timeout=timeout+10)
+            result     = subprocess.run(cmd, capture_output=True, timeout=timeout + 10)
             stderr_out = result.stderr.decode("utf-8", errors="replace").lower()
             if "permission denied" in stderr_out:
-                warn(f"Permission denied accessing: {url}")
                 return 0, ""
             try:    out = result.stdout.decode("utf-8",    errors="replace")
             except: out = result.stdout.decode("latin-1", errors="replace")
@@ -207,18 +356,12 @@ def curl_get(url, timeout=25, retries=3, raw_url=None):
                 body, code_str = out.rsplit("__HTTPCODE__", 1)
                 code = int(code_str.strip()) if code_str.strip().isdigit() else 0
                 if code in (429, 502, 503) and attempt < retries:
-                    wait = 2 ** attempt
-                    warn(f"HTTP {code} — backing off {wait}s (attempt {attempt}/{retries})")
-                    time.sleep(wait); continue
+                    time.sleep(2 ** attempt); continue
                 return code, body
             return 0, ""
         except subprocess.TimeoutExpired:
-            warn(f"Network timeout on attempt {attempt}/{retries}: {url[:80]}")
             if attempt < retries: time.sleep(2)
-        except PermissionError:
-            warn(f"Permission error running curl for: {url[:80]}")
-            return 0, ""
-        except Exception:
+        except:
             return 0, ""
     return 0, ""
 
@@ -227,7 +370,8 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
     try:
         parts   = referer_base.split('/')
         referer = parts[0] + '//' + parts[2] + '/'
-    except: referer = referer_base
+    except:
+        referer = referer_base
 
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
     cmd = [
@@ -246,23 +390,14 @@ def curl_download_file(url, dest_path, timeout=60, raw_url=None):
         url,
     ]
     try:
-        result     = subprocess.run(cmd, capture_output=True, timeout=timeout+15)
-        stderr_out = result.stderr.decode("utf-8", errors="replace").lower()
-        if "permission denied" in stderr_out:
-            warn(f"Permission denied downloading: {url[:80]}")
-            return 0
+        result   = subprocess.run(cmd, capture_output=True, timeout=timeout + 15)
         code_str = result.stdout.decode("ascii", errors="ignore").strip()
-        match = re.search(r'(\d{3})$', code_str)
-        code = int(match.group(1)) if match else 0
-        return code
-    except subprocess.TimeoutExpired:
-        warn(f"Download timeout: {url[:80]}")
+        match    = re.search(r'(\d{3})$', code_str)
+        return int(match.group(1)) if match else 0
+    except:
         return 0
-    except PermissionError:
-        warn(f"Permission error downloading: {url[:80]}")
-        return 0
-    except Exception:
-        return 0
+
+# ── BANNER ─────────────────────────────────────────────────────────────────────
 
 def banner():
     ART = [
@@ -271,67 +406,48 @@ def banner():
         r"  ██████╔╝█████╗  ███████║███████╗   ██║   ",
         r"  ██╔══██╗██╔══╝  ██╔══██║╚════██║   ██║   ",
         r"  ██████╔╝███████╗██║  ██║███████║   ██║   ",
-        r"  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ",
+        r"  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝  ",
     ]
-    SUB      = "  ⬡  Wayback Hunter  ·  JS Secret Scanner  ·  v1.2  ·  by ALONE BEAST  ⬡"
-    FALLBACK = "  ▓▓  BEAST v1.2  ·  by ALONE BEAST  ▓▓"
-    w        = tw(); art_w = max(len(l) for l in ART)
-
-    print(); sys.stdout.write(HIDE)
-    if w >= art_w:
-        pad = max(0, (w - art_w) // 2)
-        for line in ART:
-            sys.stdout.write(f"{R}{BLD}{' '*pad}{line}{RST}\n")
-    else:
-        pad = max(0, (w - len(FALLBACK)) // 2)
-        sys.stdout.write(f"{R}{BLD}{' '*pad}{FALLBACK}{RST}\n")
-    sys.stdout.write(SHOW)
+    FALLBACK = "  BEAST v1.2"
+    w        = tw()
+    art_w    = max(len(l) for l in ART)
 
     print()
-    sub_clean = re.sub(r'\033\[[0-9;]*m', '', SUB)
-    pad2      = max(0, (w - len(sub_clean)) // 2)
-    print(f"{R}{BLD}{' '*pad2}{SUB}{RST}")
-    print(f"{R}{BLD}{chr(9473)*w}{RST}\n")
+    if w >= art_w:
+        for line in ART:
+            print(f"{R}{BLD}{line}{RST}")
+    else:
+        print(f"{R}{BLD}{FALLBACK}{RST}")
+
+    print()
+    print(f"  {DIM}Wayback Hunter   JS Secret Scanner   v1.2   by ALONE BEAST{RST}")
+    print(f"{R}{'-' * min(w, 64)}{RST}")
+    print()
+
+# ── MENUS ──────────────────────────────────────────────────────────────────────
 
 def show_help():
-    w = tw()
-    print(f"\n{R}{BLD}{'─'*w}{RST}")
-    print(f"{R}{BLD}{'BEASTCRYPT  v1.2  —  by ALONE BEAST':^{w}}{RST}")
-    print(f"{R}{BLD}{'─'*w}{RST}\n")
-
-    print(f"  {W}{BLD}USAGE{RST}\n")
+    _section_header("BEASTCRYPT  v1.2  --  USAGE", R)
+    print(f"  {W}{BLD}COMMANDS{RST}\n")
     cmds = [
-        ("beastcrypt",                               "Interactive menu (recommended)"),
-        ("beastcrypt -d <domain> -m <mode>",         "Direct CLI run"),
+        ("beastcrypt",                               "Interactive menu"),
+        ("beastcrypt -d <domain> -m <mode>",         "Direct run"),
         ("beastcrypt -d <domain> -m 1 -t <types>",  "Wayback with file type filter"),
         ("beastcrypt -d <domain> -m 1 --json-only", "URL report only, no download"),
     ]
     for cmd, desc in cmds:
         print(f"    {G}{cmd:<46}{RST}  {DIM}{desc}{RST}")
 
-    print(f"\n  {W}{BLD}OPTIONS{RST}\n")
-    flags = [
-        ("-d, --domain",    "DOMAIN",  "Target domain  (e.g. example.com)"),
-        ("-o, --output",    "DIR",     "Output directory  [default: beast_output]"),
-        ("-m, --mode",      "N",       "Mode number: 1 / 2 / 3"),
-        ("-t, --types",     "TYPES",   "Comma-separated file types for Mode 1"),
-        ("    --json-only", "",        "Mode 1: JSON report only, skip file download"),
-        ("-h, --help",      "",        "Show this help screen"),
-    ]
-    for flag, meta, desc in flags:
-        meta_str = f" {Y}{meta}{RST}" if meta else ""
-        print(f"    {G}{flag}{RST}{meta_str:<20}  {DIM}{desc}{RST}")
-
     print(f"\n  {W}{BLD}MODES{RST}\n")
     modes = [
-        ("1", "Wayback File Hunter",  "Download archived files by type from Wayback Machine"),
-        ("2", "JS Secret Scanner",    "Scan live + Wayback JS for secrets & endpoints"),
-        ("3", "Full Beast Mode",      "Wayback secret-relevant files  +  JS scanner combined"),
+        ("1", "Wayback File Hunter",  "Download archived files by type"),
+        ("2", "JS Secret Scanner",    "Scan live + Wayback JS for secrets"),
+        ("3", "Full Beast Mode",      "Both modes combined"),
     ]
     for n, title, desc in modes:
-        print(f"    {R}{BLD}[{n}]{RST}  {W}{BLD}{title:<22}{RST}  {DIM}{desc}{RST}")
+        print(f"    {R}{BLD}  {n}  {RST}  {W}{BLD}{title:<22}{RST}  {DIM}{desc}{RST}")
 
-    print(f"\n  {W}{BLD}FILE TYPES{RST}  {DIM}(use with -t, Mode 1 only){RST}\n")
+    print(f"\n  {W}{BLD}FILE TYPES{RST}  {DIM}(for -t flag, Mode 1 only){RST}\n")
     types = ["js", "json", "pdf", "zip", "xml", "csv", "sql", "config", "html", "img", "map", "txt", "wasm", "all"]
     row = "    "
     for i, t in enumerate(types):
@@ -339,57 +455,37 @@ def show_help():
         if (i + 1) % 7 == 0:
             print(row); row = "    "
     if row.strip(): print(row)
-
-    print(f"\n  {W}{BLD}EXAMPLES{RST}\n")
-    examples = [
-        ("beastcrypt -d tesla.com -m 1",                    "Wayback hunter — all files"),
-        ("beastcrypt -d tesla.com -m 1 -t js,json,config",  "Wayback — JS + JSON + config only"),
-        ("beastcrypt -d tesla.com -m 2",                    "JS secret scanner"),
-        ("beastcrypt -d tesla.com -m 3",                    "Full beast mode"),
-        ("beastcrypt -d tesla.com -m 1 --json-only",        "Report only, no files downloaded"),
-    ]
-    for cmd, desc in examples:
-        print(f"    {G}{cmd}{RST}")
-        print(f"      {DIM}↳ {desc}{RST}\n")
-
-    print(f"  {W}{BLD}DETECTS{RST}")
-    print(f"  {DIM}AWS · Google API · GitHub · Slack · Stripe · JWT · DB URLs · S3 · Azure · Heroku · Telegram · and more{RST}\n")
-    print(f"{R}{BLD}{'─'*w}{RST}\n")
+    print()
+    _sep(R)
+    print()
 
 def main_menu():
-    w = tw()
-    print(f"\n{R}{BLD}{'SELECT MODE':^{w}}{RST}\n")
+    print(f"\n{R}{BLD}  SELECT MODE{RST}\n")
     modes = [
-        ("1", "Wayback File Hunter", "Download any file type from Wayback Machine"),
-        ("2", "JS Secret Scanner",   "Scan live + Wayback JS for secrets & endpoints"),
-        ("3", "Full Beast Mode",     "Wayback secret-relevant files + JS Scanner"),
-        ("0", "Exit",                ""),
+        ("1", R,   "Wayback File Hunter",  "Retrieve archived files from Wayback Machine"),
+        ("2", C,   "JS Secret Scanner",    "Scan JS files for secrets and endpoints"),
+        ("3", M,   "Full Beast Mode",      "Wayback hunter + JS scanner combined"),
+        ("0", DIM, "Exit",                 ""),
     ]
-    for num, title, desc in modes:
-        col      = R if num != "0" else DIM
+    for num, col, title, desc in modes:
         desc_str = f"  {DIM}{desc}{RST}" if desc else ""
-        print(f"  {col}{BLD}[{num}]{RST}  {W}{BLD}{title}{RST}{desc_str}")
+        print(f"  {col}{BLD}  {num}  {RST}  {W}{BLD}{title}{RST}{desc_str}")
     print()
-    print(f"  {R}❯{RST} ", end="", flush=True)
+    print(f"  {R}>{RST} ", end="", flush=True)
     return input().strip()
 
 def filetype_menu():
-    box("SELECT FILE TYPES TO DOWNLOAD", R)
-    print(f"  {DIM}Space-separated numbers  |  0 = ALL FILES{RST}\n")
-
+    _section_header("SELECT FILE TYPES TO DOWNLOAD", R)
+    print(f"  {DIM}Enter space-separated numbers.  0 = all files.{RST}\n")
     items = list(FILE_GROUPS.keys())
     for i, key in enumerate(items, 1):
         g   = FILE_GROUPS[key]
         ext = "  ".join(g["exts"])
-        print(f"  {g['color']}{BLD}[{i:>2}]{RST}  {W}{g['label']:<18}{RST}  {DIM}{ext}{RST}")
-    print(f"\n  {R}{BLD}[ 0]{RST}  {W}{BLD}ALL FILES{RST}  {DIM}(everything archived){RST}")
-    print()
-    print(f"  {R}❯{RST} ", end="", flush=True)
+        print(f"  {g['color']}{BLD}  {i:>2}  {RST}  {W}{g['label']:<18}{RST}  {DIM}{ext}{RST}")
+    print(f"\n  {R}{BLD}   0  {RST}  {W}{BLD}All Files{RST}  {DIM}(everything archived){RST}\n")
+    print(f"  {R}>{RST} ", end="", flush=True)
     raw = input().strip()
-
-    if "0" in raw.split():
-        return None
-
+    if "0" in raw.split(): return None
     selected = set()
     for tok in raw.split():
         if tok.isdigit():
@@ -398,87 +494,109 @@ def filetype_menu():
                 selected.update(FILE_GROUPS[items[idx]]["exts"])
     return selected if selected else None
 
-def get_domain_input(prompt="Target domain (e.g. example.com)"):
-    print(f"\n  {R}{BLD}{prompt}{RST}: ", end="", flush=True)
+def get_domain_input(prompt="Target domain  (e.g. example.com)"):
+    print(f"\n  {R}{BLD}{prompt}{RST}")
+    print(f"  {R}>{RST} ", end="", flush=True)
     return input().strip()
 
 def get_output_dir(default="beast_output"):
-    print(f"  {R}{BLD}Output directory{RST} {DIM}(Enter = {default}){RST}: ", end="", flush=True)
+    print(f"\n  {DIM}Output directory  (press Enter for: {default}){RST}")
+    print(f"  {R}>{RST} ", end="", flush=True)
     val = input().strip()
     return val if val else default
 
 def ask_output_format():
-    print(f"\n  {R}{BLD}Output format:{RST}")
-    print(f"  {G}[1]{RST}  Save files to disk  {DIM}(default){RST}")
-    print(f"  {Y}[2]{RST}  JSON report only    {DIM}(URLs + metadata, no download){RST}")
-    print(f"  {M}[3]{RST}  Both")
-    print(f"\n  {R}❯{RST} ", end="", flush=True)
+    print(f"\n  {R}{BLD}Output format{RST}\n")
+    print(f"  {G}  1  {RST}  Save files to disk  {DIM}(default){RST}")
+    print(f"  {Y}  2  {RST}  JSON report only    {DIM}(no download){RST}")
+    print(f"  {M}  3  {RST}  Both\n")
+    print(f"  {R}>{RST} ", end="", flush=True)
     return input().strip()
 
+# ── CDX FETCHER ────────────────────────────────────────────────────────────────
+
+def _cdx_fetch_one_query(api_base, label, url_ts, timeout=60, max_retries=4, on_update=None):
+    offset = 0; gained = 0
+    while True:
+        paged_url = f"{api_base}&limit={PAGE_SIZE}&offset={offset}"
+        retry = 0; status = 0; body = ""
+        while retry <= max_retries:
+            if on_update: on_update(offset, len(url_ts), f"offset={offset}  retry={retry}")
+            status, body = curl_get(paged_url, timeout=timeout)
+            if status == 200 and body.strip(): break
+            elif status == 429:
+                wait = 8 * (2 ** retry)
+                if on_update: on_update(offset, len(url_ts), f"rate limited  waiting {wait}s")
+                time.sleep(wait); retry += 1
+            elif status == 0:
+                wait = 5 * (2 ** retry)
+                if on_update: on_update(offset, len(url_ts), f"timeout  retry in {wait}s")
+                time.sleep(wait); retry += 1
+            else:
+                if on_update: on_update(offset, len(url_ts), f"HTTP {status}  skipping")
+                return gained
+
+        if status != 200 or not body.strip():
+            if on_update: on_update(offset, len(url_ts), f"failed after {max_retries} retries")
+            return gained
+
+        raw_lines = [l.strip() for l in body.splitlines() if l.strip()]
+        raw_count = len(raw_lines); page_got = 0
+        for line in raw_lines:
+            parts = line.split(" ", 1)
+            if len(parts) != 2: continue
+            ts, raw = parts
+            url = decode_url(raw.strip()).split("#")[0]
+            if not url.startswith("http"): continue
+            ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
+            if url not in url_ts or ts > url_ts[url][0]:
+                url_ts[url] = (ts, ext); page_got += 1; gained += 1
+
+        if on_update: on_update(offset, len(url_ts), f"page done  +{page_got} new")
+        if raw_count < PAGE_SIZE or page_got == 0: break
+        offset += PAGE_SIZE; time.sleep(1.2)
+    return gained
+
 def cdx_fetch_urls(domain, exts_filter=None, limit=None):
-    if limit is None:
-        limit = CDX_LIMIT_ALL
     clean  = domain.split("://")[-1].rstrip("/")
-    url_ts = {}; spin_i = 0
+    url_ts = {}
 
     if exts_filter:
-        queries = []
-        for ext in sorted(exts_filter):
-            queries.append((
-                f"http://web.archive.org/cdx/search/cdx"
-                f"?url={clean}/*{ext}&output=text&matchType=domain"
-                f"&fl=timestamp,original&collapse=urlkey&limit={limit}"
-                f"&filter=statuscode:200",
-                ext
-            ))
+        queries = [(
+            f"http://web.archive.org/cdx/search/cdx"
+            f"?url={clean}/*{ext}&output=text&matchType=domain"
+            f"&fl=timestamp,original&collapse=urlkey&filter=statuscode:200",
+            ext
+        ) for ext in sorted(exts_filter)]
     else:
         queries = [(
             f"http://web.archive.org/cdx/search/cdx"
             f"?url={clean}/*&output=text&matchType=domain"
-            f"&fl=timestamp,original&collapse=urlkey&limit={limit}"
-            f"&filter=statuscode:200",
-            "all files"
+            f"&fl=timestamp,original&collapse=urlkey&filter=statuscode:200",
+            "all"
         )]
 
-    for api, label in queries:
-        frame = SPIN[spin_i % len(SPIN)]; spin_i += 1
-        sys.stdout.write(f"\r  {Y}{frame}{RST} CDX querying {BLD}{label}{RST}   ")
-        sys.stdout.flush()
+    total_q = len(queries)
+    _reset_progress()
 
-        status, body = curl_get(api, timeout=60, retries=2)
+    for qi, (api_base, ext_label) in enumerate(queries, 1):
+        show_cdx_progress(clean, ext_label, qi, total_q, len(url_ts), 0, f"starting  {ext_label}")
 
-        if status != 200 or not body.strip():
-            sys.stdout.write(f"\r  {R}✘{RST} CDX {BLD}{label}{RST}  HTTP {status} / empty{' '*20}\n")
-            sys.stdout.flush()
-            if status == 429:
-                warn(f"CDX rate limited on {label} — skipping this query")
-            continue
+        def make_cb(lbl, idx):
+            def cb(offset, found, status_str):
+                show_cdx_progress(clean, lbl, idx, total_q, found, offset, status_str)
+            return cb
 
-        before = len(url_ts)
-        for line in body.splitlines():
-            line = line.strip()
-            if not line: continue
-            parts = line.split(" ", 1)
-            if len(parts) != 2: continue
-            ts, raw = parts
-            url = decode_url(raw.strip())
-            if not url.startswith("http"): continue
-            url = url.split("#")[0]
+        _cdx_fetch_one_query(api_base, ext_label, url_ts,
+                             timeout=60, max_retries=4,
+                             on_update=make_cb(ext_label, qi))
+        show_cdx_progress(clean, ext_label, qi, total_q, len(url_ts), 0, f"complete  total={len(url_ts)}")
+        time.sleep(1.5)
 
-            if exts_filter:
-                url_ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
-                if url_ext not in exts_filter:
-                    continue
-
-            ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
-            if url not in url_ts or ts > url_ts[url][0]:
-                url_ts[url] = (ts, ext)
-
-        gained = len(url_ts) - before
-        sys.stdout.write(f"\r  {G}✔{RST} CDX {BLD}{label}{RST}  {G}+{gained}{RST} URLs{' '*20}\n")
-        sys.stdout.flush()
-
-    ok(f"Total unique URLs found: {G}{BLD}{len(url_ts)}{RST}")
+    _reset_progress()
+    print()
+    ok(f"Total unique URLs found  {G}{BLD}{len(url_ts)}{RST}")
+    print()
 
     result = []
     for orig, (ts, ext) in url_ts.items():
@@ -487,62 +605,31 @@ def cdx_fetch_urls(domain, exts_filter=None, limit=None):
         result.append({"orig": orig, "snap": snap, "ts": ts, "ext": ext})
     return result
 
-def _draw_hunt_box(w, bar_width, target_label, mode_label, pct, i, total, _unused, ok_count, f403, f404, short_url):
-    filled     = int(bar_width * pct / 100)
-    bar_str    = f"{G}{'█' * filled}{'░' * (bar_width - filled)}{RST}"
-    inner      = w - 4
-
-    tgt        = target_label[:28]
-    mode       = mode_label[:20]
-    tgt_plain  = f"  Target: {tgt}  Mode: {mode}"
-    tgt_pad    = max(0, inner - len(tgt_plain))
-
-    prog_plain = f"  [{'█'*filled}{'░'*(bar_width-filled)}] {pct:>3}% ({i}/{total})"
-    prog_pad   = max(0, inner - len(prog_plain))
-
-    stat_pad   = max(0, inner - 34)
-    url_disp   = short_url[:max(0, inner - 26)]
-    url_plain  = f"  CURRENTLY CHECKING: [ {url_disp} ]"
-    url_pad    = max(0, inner - len(url_plain))
-
-    lines = [
-        f"{R}┌{'─'*(w-2)}┐{RST}",
-        f"{R}│{RST}  {BLD}HUNTING IN PROGRESS...{RST}{' '*(inner-22)}{R}│{RST}",
-        f"{R}├{'─'*(w-2)}┤{RST}",
-        f"{R}│{RST}  Target: {W}{BLD}{tgt}{RST}  Mode: {Y}{BLD}{mode}{RST}{' '*tgt_pad}{R}│{RST}",
-        f"{R}│{RST}{' '*inner}{R}│{RST}",
-        f"{R}│{RST}  [{bar_str}] {BLD}{pct:>3}%{RST} ({i}/{total}){' '*prog_pad}{R}│{RST}",
-        f"{R}│{RST}{' '*inner}{R}│{RST}",
-        f"{R}│{RST}  {W}STATUS SUMMARY:{RST}{' '*(inner-16)}{R}│{RST}",
-        f"{R}│{RST}  {G}● 200 OK (Downloaded){RST}  :  {BLD}{str(ok_count):<6}{RST}{' '*stat_pad}{R}│{RST}",
-        f"{R}│{RST}  {Y}● 403 Forbidden      {RST}  :  {BLD}{str(f403):<6}{RST}{' '*stat_pad}{R}│{RST}",
-        f"{R}│{RST}  {R}● 404 Not Found      {RST}  :  {BLD}{str(f404):<6}{RST}{' '*stat_pad}{R}│{RST}",
-        f"{R}│{RST}{' '*inner}{R}│{RST}",
-        f"{R}│{RST}  {DIM}CURRENTLY CHECKING:{RST} [ {DIM}{url_disp}{RST} ]{' '*url_pad}{R}│{RST}",
-        f"{R}└{'─'*(w-2)}┘{RST}",
-    ]
-    return lines
+# ── WAYBACK HUNTER ─────────────────────────────────────────────────────────────
 
 def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=False):
     domain    = normalize_domain(domain)
     clean_dom = _strip_domain_tld(domain)
     folder    = os.path.join(output_dir, f"wayback_{clean_dom}")
 
-    info(f"Target     : {BLD}{domain}{RST}")
-    info(f"Output dir : {BLD}{folder}/{RST}")
+    print()
+    info(f"Target      {W}{BLD}{domain}{RST}")
+    info(f"Output      {W}{BLD}{folder}/{RST}")
 
-    box(f"WAYBACK CDX — {domain}", R)
+    _section_header(f"WAYBACK CDX  --  {domain}", R)
     urls = cdx_fetch_urls(domain, exts_filter)
 
     if not urls:
-        err("No URLs found in Wayback for this domain."); return []
+        err("No archived URLs found for this domain."); return []
 
     by_ext = defaultdict(list)
-    for u in urls:
-        by_ext[u["ext"] or "no-ext"].append(u)
-    print(f"\n  {BLD}File type breakdown:{RST}")
+    for u in urls: by_ext[u["ext"] or "no-ext"].append(u)
+
+    print(f"  {W}{BLD}File type breakdown{RST}\n")
     for ext, lst in sorted(by_ext.items(), key=lambda x: -len(x[1])):
-        print(f"    {Y}{ext:<14}{RST}  {G}{len(lst)}{RST}")
+        bar_len = min(20, max(1, len(lst) * 20 // max(1, len(urls))))
+        bar     = f"{G}{'|' * bar_len}{DIM}{'.' * (20 - bar_len)}{RST}"
+        print(f"  {Y}  {ext:<14}{RST}  {bar}  {DIM}{len(lst)}{RST}")
     print()
 
     os.makedirs(folder, exist_ok=True)
@@ -555,38 +642,29 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
             report["files"].append({"url": u["orig"], "snap": u["snap"],
                                     "ts": u["ts"], "ext": u["ext"]})
         _save_json(report, folder, "wayback_urls.json")
-        ok("JSON report saved (no files downloaded).")
+        ok("JSON report saved.")
         return report["files"]
 
-    w_tmp = tw()
-    print(f"\n{R}┌{'─'*(w_tmp-2)}┐{RST}")
-    dl_q = f"  Do you want to download all {total} Wayback files to your local machine?"
-    print(f"{R}│{RST}{W}{BLD}{dl_q:<{w_tmp-2}}{RST}{R}│{RST}")
-    dl_h = "  Type  yes  to download files   |   no  to save URLs only"
-    print(f"{R}│{RST}{DIM}{dl_h:<{w_tmp-2}}{RST}{R}│{RST}")
-    print(f"{R}└{'─'*(w_tmp-2)}┘{RST}")
-    print(f"\n  {R}❯{RST} ", end="", flush=True)
+    _sep(R)
+    print(f"\n  {W}{BLD}Download {total} archived files?{RST}")
+    print(f"  {DIM}yes  =  download all     no  =  save URL list only{RST}\n")
+    print(f"  {R}>{RST} ", end="", flush=True)
     dl_ans = input().strip().lower()
+    print()
 
     if dl_ans not in ("yes", "y"):
-        info("Saving URLs only — no files will be downloaded.")
+        info("Saving URL list only.")
         for u in urls:
             report["files"].append({"url": u["orig"], "snap": u["snap"],
                                     "ts": u["ts"], "ext": u["ext"]})
-        # Chota, fixed naam — beast/wayback_urls.txt
         urls_path = os.path.join(folder, "wayback_urls.txt")
         with open(urls_path, "w", encoding="utf-8") as f:
-            for u in urls:
-                f.write(u["orig"] + "\n")
-        ok(f"URLs saved → {G}{urls_path}{RST}")
+            for u in urls: f.write(u["orig"] + "\n")
+        ok(f"Saved  {G}{urls_path}{RST}")
         return report["files"]
 
-    w          = tw()
-    bar_width  = max(10, min(36, w - 50))
     target_lbl = domain.split("://")[-1].rstrip("/")
-    mode_lbl   = "Wayback Hunter"
-    # _draw_hunt_box returns exactly 14 lines — cursor up = 14 lines exact
-    box_height = 14
+    _reset_progress()
 
     for i, u in enumerate(urls, 1):
         orig  = u["orig"]; snap = u["snap"]; ext = u["ext"] or ""
@@ -594,30 +672,13 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
         if ext and not fname.endswith(ext): fname += ext
         dest  = os.path.join(folder, fname)
 
-        pct       = max(1, int(i / total * 100))
-        max_u     = max(10, w - 26)
-        short_url = orig if len(orig) <= max_u else "..." + orig[-(max_u-3):]
-
-        lines = _draw_hunt_box(w, bar_width, target_lbl, mode_lbl,
-                               pct, i, total, bar_width,
-                               downloaded, f403, f404, short_url)
-
-        if i == 1:
-            # Pehli baar: ek blank line + box print karo
-            sys.stdout.write("\n" + "\n".join(lines) + "\n")
-        else:
-            # box_height = len(lines) = 14 lines
-            # Cursor ko exactly utna upar le jao jitni lines hain
-            sys.stdout.write(f"\033[{len(lines)}A\r")
-            sys.stdout.write("\n".join(lines) + "\n")
-        sys.stdout.flush()
+        show_hunt_progress(target_lbl, i, total, downloaded, f403, f404, orig)
 
         code = curl_download_file(snap, dest, timeout=40, raw_url=orig)
         src  = "WB"
         if code != 200 or not os.path.exists(dest) or os.path.getsize(dest) < 10:
             if os.path.exists(dest): os.remove(dest)
-            code = curl_download_file(orig, dest, timeout=25)
-            src  = "LV"
+            code = curl_download_file(orig, dest, timeout=25); src = "LV"
 
         if code == 200 and os.path.exists(dest) and os.path.getsize(dest) > 5:
             downloaded += 1
@@ -627,24 +688,27 @@ def wayback_hunter(domain, exts_filter, output_dir, save_files=True, json_only=F
             })
         else:
             if os.path.exists(dest): os.remove(dest)
-            if code == 403: f403 += 1
+            if code == 403:   f403 += 1
             elif code == 404: f404 += 1
-            else: failed += 1
+            else:             failed += 1
             report["files"].append({"url": orig, "snap": snap, "ts": u["ts"],
                                     "ext": ext, "local": None, "source": None})
 
-    # Loop ke baad cursor ko box ke neeche le jao properly
-    sys.stdout.write("\n")
-    sys.stdout.flush()
-
-    ok(f"Downloaded : {G}{BLD}{downloaded}{RST}  /  {total} total")
+    _reset_progress()
+    print()
+    _sep(R)
+    print()
+    ok(f"Downloaded    {G}{BLD}{downloaded}{RST}  /  {total}")
     total_fail = failed + f403 + f404
     if total_fail:
-        warn(f"Failed     : {Y}{total_fail}{RST}  (403:{f403}  404:{f404}  other:{failed})")
+        warn(f"Failed        {Y}{total_fail}{RST}  (403: {f403}   404: {f404}   other: {failed})")
     else:
-        ok(f"Failed     : {G}0{RST}")
+        ok(f"Failed        {G}0{RST}")
+    print()
     _save_json(report, folder, "wayback_report.json")
     return report["files"]
+
+# ── JS SCANNER ─────────────────────────────────────────────────────────────────
 
 def extract_js_url(raw):
     url = decode_url(raw.strip()).split('#')[0]
@@ -668,104 +732,82 @@ def is_false_positive(label, value):
     return False
 
 def fetch_wayback_js(domain):
-    box(f"WAYBACK JS — {domain}", R)
     clean  = domain.split("://")[-1].rstrip("/")
-    url_ts = {}; spin_i = 0
+    url_ts = {}
+
     queries = [
         (f"http://web.archive.org/cdx/search/cdx?url={clean}/*.js&output=text&matchType=prefix"
-         f"&fl=timestamp,original&collapse=urlkey&limit={CDX_LIMIT_JS}&filter=statuscode:200"
-         f"&filter=mimetype:application/javascript", "pass 1 (mime)"),
+         f"&fl=timestamp,original&collapse=urlkey"
+         f"&filter=statuscode:200&filter=mimetype:application/javascript",
+         "mime-filter"),
         (f"http://web.archive.org/cdx/search/cdx?url={clean}/*.js&output=text&matchType=domain"
-         f"&fl=timestamp,original&collapse=urlkey&limit={CDX_LIMIT_JS}&filter=statuscode:200",
-         "pass 2 (domain)"),
+         f"&fl=timestamp,original&collapse=urlkey&filter=statuscode:200",
+         "domain-wide"),
     ]
-    for api, label in queries:
-        frame = SPIN[spin_i % len(SPIN)]; spin_i += 1
-        sys.stdout.write(f"\r  {Y}{frame}{RST} CDX {BLD}[{label}]{RST}   ")
-        sys.stdout.flush()
-        status, body = curl_get(api, timeout=45)
-        if status != 200 or not body.strip():
-            sys.stdout.write(f"\r  {R}✘{RST} CDX [{label}]  HTTP {status}{' '*20}\n")
-            sys.stdout.flush()
-            if status == 429:
-                warn(f"CDX rate limited [{label}] — backing off before next query")
-                time.sleep(10)
-            continue
-        before = len(url_ts)
-        for line in body.splitlines():
-            line = line.strip()
-            if not line: continue
-            parts = line.split(" ", 1)
-            if len(parts) != 2: continue
-            ts, raw = parts
-            orig = extract_js_url(raw)
-            if not orig: continue
-            if orig not in url_ts or ts > url_ts[orig]: url_ts[orig] = ts
-        gained = len(url_ts) - before
-        sys.stdout.write(f"\r  {G}✔{RST} CDX [{label}]  {G}+{gained}{RST} URLs{' '*20}\n")
-        sys.stdout.flush()
+
+    total_q = len(queries)
+    _reset_progress()
+
+    for qi, (api_base, ext_label) in enumerate(queries, 1):
+        show_cdx_progress(clean, ext_label, qi, total_q, len(url_ts), 0, f"starting  {ext_label}")
+
+        def make_cb(lbl, idx):
+            def cb(offset, found, status_str):
+                show_cdx_progress(clean, lbl, idx, total_q, found, offset, status_str)
+            return cb
+
+        _cdx_fetch_one_query(api_base, ext_label, url_ts,
+                             timeout=60, max_retries=4,
+                             on_update=make_cb(ext_label, qi))
+        show_cdx_progress(clean, ext_label, qi, total_q, len(url_ts), 0, f"complete  total={len(url_ts)}")
+        time.sleep(1.5)
+
+    _reset_progress()
+    print()
 
     if not url_ts:
-        warn("Wayback returned no JS for this domain."); return []
-    ok(f"Found {G}{BLD}{len(url_ts)}{RST} unique JS URLs from Wayback")
+        warn("No JS files found in Wayback for this domain."); return []
+
     result = []
-    for orig, ts in url_ts.items():
+    for orig, (ts, ext) in url_ts.items():
         encoded = urllib.parse.quote(orig, safe=':/?=&%+@#')
         snap    = f"http://web.archive.org/web/{ts}if_/{encoded}"
         result.append((orig, snap))
     return result
 
 def fetch_katana_js(domain):
-    box(f"KATANA — {domain}", R)
+    _section_header(f"KATANA  --  {domain}", R)
     katana_path = os.path.expanduser("~/go/bin/katana")
     if not os.path.isfile(katana_path):
-        warn("Katana not found at ~/go/bin/katana — skipping"); return []
-    info(f"Running Katana (depth 3, JS crawl mode, timeout {KATANA_TIMEOUT}s)...")
+        warn("Katana not found at ~/go/bin/katana  --  skipping"); return []
+    info(f"Running Katana  depth=3  timeout={KATANA_TIMEOUT}s")
+    print()
     try:
         result = subprocess.run(
             [katana_path, "-u", domain, "-jc", "-d", "3", "-silent", "-nc"],
-            capture_output=True, text=True,
-            timeout=KATANA_TIMEOUT,
-            errors="ignore"
+            capture_output=True, text=True, timeout=KATANA_TIMEOUT, errors="ignore"
         )
         seen, pairs = set(), []
         for line in result.stdout.splitlines():
             u = extract_js_url(line.strip())
-            if u and u not in seen:
-                seen.add(u); pairs.append((u, None))
-        ok(f"Katana found {G}{BLD}{len(pairs)}{RST} JS URLs")
-        if not pairs:
-            warn("No JS from Katana — sample:")
-            for l in result.stdout.splitlines()[:8]: print(f"    {DIM}{l}{RST}")
+            if u and u not in seen: seen.add(u); pairs.append((u, None))
+        ok(f"Katana found  {G}{BLD}{len(pairs)}{RST}  JS URLs")
+        print()
         return pairs
-    except FileNotFoundError:         warn("Katana not executable — skipping"); return []
-    except subprocess.TimeoutExpired: warn(f"Katana timed out after {KATANA_TIMEOUT}s"); return []
+    except FileNotFoundError:
+        warn("Katana not executable  --  skipping"); return []
+    except subprocess.TimeoutExpired:
+        warn(f"Katana timed out after {KATANA_TIMEOUT}s"); return []
 
-def download_js_and_maps_structured(domain, url_pairs, output_dir):
-    dom_label  = _strip_domain_tld(domain)
-    js_dir     = os.path.join(output_dir, "downloads", dom_label, "js")
-    map_dir    = os.path.join(output_dir, "downloads", dom_label, "maps")
-    os.makedirs(js_dir,  exist_ok=True)
-    os.makedirs(map_dir, exist_ok=True)
-
-    box(f"STRUCTURED DOWNLOAD → downloads/{dom_label}/", R)
-    info(f"JS   → {js_dir}")
-    info(f"Maps → {map_dir}")
-    print()
-
-    js_records  = []
-    map_records = []
-    total = len(url_pairs)
+def _download_js_core(url_pairs, js_dir, map_dir, label):
+    total = len(url_pairs); ok_c = 0; fail_c = 0
+    js_records = []; map_records = []
+    _reset_progress()
 
     for i, (orig_url, snap_url) in enumerate(url_pairs, 1):
-        pct = max(1, int(i / total * 100))
-        line_txt = f"  [{i:>{len(str(total))}}/{total} {pct:>3}%] {orig_url[:tw()-30]}"
-        sys.stdout.write(f"\r{DIM}{line_txt:<{tw()-1}}{RST}")
-        sys.stdout.flush()
-
+        show_js_download_progress(os.path.basename(js_dir), i, total, ok_c, fail_c, orig_url)
         js_fname = _url_to_filename(orig_url, ".js")
         js_path  = os.path.join(js_dir, js_fname)
-
         status, body, used_snap = 0, "", False
 
         if snap_url:
@@ -780,20 +822,15 @@ def download_js_and_maps_structured(domain, url_pairs, output_dir):
             else: status, body = 0, ""
 
         if not used_snap and not body and snap_url:
-            sys.stdout.write(f"\r  {Y}[retry→WB]{RST} {orig_url[:tw()-20]}")
-            sys.stdout.flush()
             status, body = curl_get(snap_url, timeout=45, raw_url=orig_url)
             if status == 200 and len(body.strip()) > 50:
                 used_snap = True; body = _strip_wayback(body)
             else: status, body = 0, ""
 
         if body and len(body.strip()) > 50:
-            with open(js_path, "w", encoding="utf-8", errors="ignore") as f:
-                f.write(body)
+            with open(js_path, "w", encoding="utf-8", errors="ignore") as f: f.write(body)
             js_src = "WB" if used_snap else "LV"
-            col    = M if js_src == "WB" else G
-            sys.stdout.write(f"\r  {G}[✔ JS]{RST}({col}{js_src}{RST}) {js_fname}\n")
-            sys.stdout.flush()
+            ok_c  += 1
             js_records.append({"orig_url": orig_url, "snap_url": snap_url,
                                 "local_path": js_path, "source": js_src})
 
@@ -811,111 +848,63 @@ def download_js_and_maps_structured(domain, url_pairs, output_dir):
 
             if ms == 200 and len(mb.strip()) > 10:
                 mb        = _strip_wayback(mb)
-                map_src   = "WB" if used_snap else "LV"
-                map_fname = _url_to_filename(orig_url, ".js") + ".map"
+                map_fname = js_fname + ".map"
                 map_path  = os.path.join(map_dir, map_fname)
-                with open(map_path, "w", encoding="utf-8", errors="ignore") as f:
-                    f.write(mb)
-                col_m = M if map_src == "WB" else G
-                sys.stdout.write(f"  {M}[★ MAP]{RST}({col_m}{map_src}{RST}) {map_fname}\n")
-                sys.stdout.flush()
+                with open(map_path, "w", encoding="utf-8", errors="ignore") as f: f.write(mb)
                 map_records.append({"orig_url": map_url, "snap_url": snap_url,
-                                    "local_path": map_path, "source": map_src})
+                                    "local_path": map_path, "source": js_src})
         else:
-            sys.stdout.write(f"\r  {DIM}[FAIL] {orig_url}{RST}\n"); sys.stdout.flush()
+            fail_c += 1
             js_records.append({"orig_url": orig_url, "snap_url": snap_url,
                                 "local_path": None, "source": "FAIL"})
 
+    _reset_progress()
     print()
-    ok(f"JS   files saved : {G}{BLD}{sum(1 for r in js_records if r['source'] != 'FAIL')}{RST}  → {js_dir}")
-    ok(f"Map  files saved : {M}{BLD}{len(map_records)}{RST}  → {map_dir}")
+    ok(f"JS files saved      {G}{BLD}{ok_c}{RST}")
+    ok(f"Map files saved     {M}{BLD}{len(map_records)}{RST}")
+    print()
     return js_records, map_records
 
+def download_js_and_maps_structured(domain, url_pairs, output_dir):
+    dom_label = _strip_domain_tld(domain)
+    js_dir    = os.path.join(output_dir, "downloads", dom_label, "js")
+    map_dir   = os.path.join(output_dir, "downloads", dom_label, "maps")
+    os.makedirs(js_dir, exist_ok=True); os.makedirs(map_dir, exist_ok=True)
+    return _download_js_core(url_pairs, js_dir, map_dir, "structured")
+
 def validate_and_download_js(url_pairs, output_dir):
-    box("DOWNLOADING JS + .map probe", R)
     os.makedirs(output_dir, exist_ok=True)
-    live_js, live_maps = [], []
     seen, deduped = set(), []
     for pair in url_pairs:
-        if pair[0] not in seen:
-            seen.add(pair[0]); deduped.append(pair)
+        if pair[0] not in seen: seen.add(pair[0]); deduped.append(pair)
 
-    total = len(deduped)
-    for i, (orig_url, snap_url) in enumerate(deduped, 1):
-        pct = max(1, int(i / total * 100))
-        line_txt = f"  [{i:>{len(str(total))}}/{total} {pct:>3}%] {orig_url[:tw()-25]}"
-        sys.stdout.write(f"\r{DIM}{line_txt:<{tw()-1}}{RST}")
-        sys.stdout.flush()
+    js_records, map_records = _download_js_core(deduped, output_dir, output_dir, "download")
 
-        status, body, used_snap = 0, "", False
+    def _read(path):
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f: return f.read()
+        except: return ""
 
-        if snap_url:
-            status, body = curl_get(snap_url, timeout=35, raw_url=orig_url)
-            if status == 200 and len(body.strip()) > 50:
-                used_snap = True; body = _strip_wayback(body)
-            else: status, body = 0, ""
-
-        if not used_snap:
-            status, body = curl_get(orig_url, timeout=25)
-            if status == 200 and len(body.strip()) > 50: body = _strip_wayback(body)
-            else: status, body = 0, ""
-
-        if not used_snap and not body and snap_url:
-            sys.stdout.write(f"\r  {Y}[retry→WB]{RST} {orig_url[:tw()-20]}")
-            sys.stdout.flush()
-            status, body = curl_get(snap_url, timeout=45, raw_url=orig_url)
-            if status == 200 and len(body.strip()) > 50:
-                used_snap = True; body = _strip_wayback(body)
-            else: status, body = 0, ""
-
-        if body and len(body.strip()) > 50:
-            fname = safe_filename(orig_url)
-            if not fname.endswith(".js"): fname += ".js"
-            fpath = os.path.join(output_dir, fname)
-            with open(fpath, "w", encoding="utf-8", errors="ignore") as f: f.write(body)
-            src = f"{M}(WB){RST}" if used_snap else f"{G}(LV){RST}"
-            sys.stdout.write(f"\r  {G}[✔ JS]{RST}{src} {orig_url}\n")
-            sys.stdout.flush()
-            live_js.append((orig_url, fpath, body))
-
-            p       = urllib.parse.urlparse(orig_url)
-            map_url = urllib.parse.urlunparse((p.scheme, p.netloc, p.path, '', '', '')) + ".map"
-            ms, mb  = curl_get(map_url, timeout=20)
-            if (ms != 200 or len(mb.strip()) < 10) and snap_url:
-                try:
-                    enc_map  = urllib.parse.quote(map_url, safe=':/?=&%+@#')
-                    m        = re.search(r'/web/(\d+)if_/', snap_url)
-                    snap_map = (f"http://web.archive.org/web/{m.group(1)}if_/{enc_map}"
-                                if m else snap_url.split("if_/")[0] + "if_/" + enc_map)
-                    ms, mb   = curl_get(snap_map, timeout=25, raw_url=map_url)
-                except: ms, mb = 0, ""
-            if ms == 200 and len(mb.strip()) > 10:
-                mb      = _strip_wayback(mb)
-                map_src = f"{M}(WB){RST}" if used_snap else f"{G}(LV){RST}"
-                mpath   = os.path.join(output_dir, fname + ".map")
-                with open(mpath, "w", encoding="utf-8", errors="ignore") as f: f.write(mb)
-                sys.stdout.write(f"  {M}[★ MAP]{RST}{map_src} {map_url}\n")
-                sys.stdout.flush()
-                live_maps.append((map_url, mpath, mb))
-
-        elif status in (301, 302, 403, 429):
-            sys.stdout.write(f"\r  {Y}[{status}]{RST} {orig_url}\n"); sys.stdout.flush()
-        else:
-            sys.stdout.write(f"\r  {DIM}[---] {orig_url}{RST}\n"); sys.stdout.flush()
-
-    print()
-    ok(f"JS  files : {G}{BLD}{len(live_js)}{RST}")
-    ok(f".map files: {M}{BLD}{len(live_maps)}{RST}")
+    live_js   = [(r["orig_url"], r["local_path"], _read(r["local_path"]))
+                  for r in js_records if r["local_path"] and os.path.exists(r["local_path"])]
+    live_maps = [(r["orig_url"], r["local_path"], _read(r["local_path"]))
+                  for r in map_records if r["local_path"] and os.path.exists(r["local_path"])]
     return live_js, live_maps
 
 def scan_secrets(live_js, live_maps, output_dir, domain):
-    box("SECRET SCANNER", R)
-    all_findings = []
-    global_seen  = set()
+    all_items     = live_js + live_maps
+    total         = len(all_items)
+    all_findings  = []
+    global_seen   = set()
+    secrets_found = 0
+    tgt_lbl       = domain.split("://")[-1].rstrip("/")
+    _reset_progress()
 
-    for url, fpath, content in (live_js + live_maps):
-        file_findings, file_seen = [], set()
-        tag = f"{M}MAP{RST}" if url.endswith(".map") else f"{C} JS{RST}"
+    for idx, (url, fpath, content) in enumerate(all_items, 1):
+        fname = url.split("/")[-1][:60]
+        show_secret_progress(tgt_lbl, idx, total, secrets_found, fname)
+
+        file_seen = set()
         for label, (pattern, group) in SECRET_PATTERNS.items():
             try:    matches = re.findall(pattern, content)
             except: continue
@@ -927,31 +916,39 @@ def scan_secrets(live_js, live_maps, output_dir, domain):
                 val = val.strip()
                 if not val or len(val) < 8: continue
                 if is_false_positive(label, val): continue
-
                 key = (label, val[:60])
                 if key in file_seen: continue
                 file_seen.add(key)
-
                 if key in global_seen: continue
                 global_seen.add(key)
-
-                file_findings.append((label, val))
                 all_findings.append({"url": url, "type": label, "value": val})
+                secrets_found += 1
 
-        if file_findings:
-            w = tw()
-            print(f"\n  {Y}┌─[{tag}{Y}] {BLD}{url}{RST}")
-            for label, val in file_findings:
-                print(f"  {Y}│{RST}  {M}{BLD}{label:<25}{RST} {W}{val[:w-35]}{RST}")
-            print(f"  {Y}└{'─'*min(65, w-4)}{RST}")
+    _reset_progress()
+    print()
+
+    if all_findings:
+        w = tw()
+        _section_header(f"SECRETS FOUND  --  {secrets_found} total", R)
+        for url, fpath, _ in all_items:
+            found = [f for f in all_findings if f["url"] == url]
+            if not found: continue
+            tag = "MAP" if url.endswith(".map") else " JS"
+            print(f"  {Y}  [{tag}]  {RST}{W}{BLD}{url}{RST}")
+            for f in found:
+                val_display = f["value"][:w - 40]
+                print(f"  {DIM}         {RST}  {M}{BLD}{f['type']:<26}{RST}  {W}{val_display}{RST}")
+            print()
 
     if all_findings and output_dir:
         ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
         clean = re.sub(r'[^\w.]', '_', domain.split("://")[-1].rstrip("/"))
         _save_json({"domain": domain, "timestamp": ts, "findings": all_findings},
-                   output_dir, f"secrets_{clean}_{ts}.json")
+                   output_dir, f"secrets_{clean}.json")
     elif not all_findings:
         warn("No secrets found.")
+        print()
+
     return all_findings
 
 def save_url_lists(live_js, live_maps, output_dir):
@@ -962,18 +959,24 @@ def save_url_lists(live_js, live_maps, output_dir):
         for url, _, _ in live_js:   f.write(url + "\n")
     with open(map_path, "w") as f:
         for url, _, _ in live_maps: f.write(url + "\n")
-    ok(f"JS  URLs → {G}{js_path}{RST}")
-    ok(f"Map URLs → {M}{map_path}{RST}")
+    ok(f"JS URLs    {G}{js_path}{RST}")
+    ok(f"Map URLs   {M}{map_path}{RST}")
+    print()
 
 def js_scanner_run(domain, output_dir):
     domain    = normalize_domain(domain)
     clean_dom = _strip_domain_tld(domain)
     folder    = os.path.join(output_dir, f"jsreaper_{clean_dom}")
 
-    info(f"Target     : {BLD}{domain}{RST}")
-    info(f"Output dir : {BLD}{folder}/{RST}")
+    print()
+    info(f"Target     {W}{BLD}{domain}{RST}")
+    info(f"Output     {W}{BLD}{folder}/{RST}")
+    print()
 
-    wb_pairs     = fetch_wayback_js(domain)
+    _section_header(f"WAYBACK JS FETCH  --  {domain}", R)
+    wb_pairs = fetch_wayback_js(domain)
+
+    _section_header(f"KATANA CRAWL  --  {domain}", R)
     katana_pairs = fetch_katana_js(domain)
 
     merged = {}
@@ -984,138 +987,130 @@ def js_scanner_run(domain, output_dir):
     if not all_pairs:
         err(f"No JS URLs found for {domain}"); return
 
-    box(f"TOTAL UNIQUE JS URLs: {len(all_pairs)}", R)
-
+    _section_header(f"JS DOWNLOAD  --  {len(all_pairs)} unique files", R)
     live_js, live_maps = validate_and_download_js(all_pairs, folder)
     download_js_and_maps_structured(domain, all_pairs, output_dir)
 
     if not live_js and not live_maps:
         warn("No files downloaded."); return
 
-    box("SAVING URL LISTS", R)
     save_url_lists(live_js, live_maps, folder)
+
+    _section_header("SECRET SCAN", R)
     findings = scan_secrets(live_js, live_maps, folder, domain)
 
-    box("JS SCAN COMPLETE — ALONE BEAST", R)
-    w = tw()
-    def _row(label, color, value):
-        val_str = str(value)
-        dots    = f"{DIM}{'·'*max(1, w-24-len(val_str)-8)}{RST}"
-        print(f"  {color}{label:<22}{RST} {dots} {BLD}{color}{val_str}{RST}")
+    _section_header("SCAN COMPLETE  --  ALONE BEAST", R)
+    w    = tw()
+    rows = [
+        ("JS Files Downloaded",   G, str(len(live_js))),
+        ("Map Files Found",       M, str(len(live_maps))),
+        ("Secrets / Endpoints",   R, str(len(findings))),
+        ("Output Folder",         B, folder + "/"),
+    ]
+    for label, color, value in rows:
+        pad = "." * max(2, w - 30 - len(value))
+        print(f"  {color}{BLD}{label:<24}{RST}  {DIM}{pad}{RST}  {BLD}{color}{value}{RST}")
     print()
-    _row("JS Files Downloaded",  G, len(live_js))
-    _row(".map Files Found",     M, len(live_maps))
-    _row("Secrets / Endpoints",  R, len(findings))
-    _row("Output Folder",        B, folder + "/")
-    dom_label = _strip_domain_tld(domain)
-    _row("Structured JS Dir",    C, os.path.join(output_dir, "downloads", dom_label, "js") + "/")
-    _row("Structured Maps Dir",  M, os.path.join(output_dir, "downloads", dom_label, "maps") + "/")
-    print(f"\n  {R}{'━'*(w-4)}{RST}\n")
+    _sep(R)
+    print()
 
 def full_beast_mode(domain, output_dir):
-    box("FULL BEAST MODE — Wayback Secret Files + JS Scanner", R)
+    _section_header("FULL BEAST MODE  --  Wayback + JS Scanner", R)
     exts_str = "  ".join(sorted(MODE3_EXTS))
-    info(f"Auto file types: {DIM}{exts_str}{RST}")
+    info(f"File types  {DIM}{exts_str}{RST}")
+    print()
     wayback_hunter(domain, MODE3_EXTS, output_dir, save_files=True, json_only=False)
     js_scanner_run(domain, output_dir)
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
 
 def parse_cli():
     import argparse
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("-d",  "--domain",    metavar="DOMAIN")
-    p.add_argument("-o",  "--output",    metavar="DIR",   default="beast_output")
-    p.add_argument("-m",  "--mode",      metavar="N")
-    p.add_argument("-t",  "--types",     metavar="TYPES")
-    p.add_argument("--json-only",        action="store_true")
-    p.add_argument("-h",  "--help",      action="store_true")
+    p.add_argument("-d",  "--domain",  metavar="DOMAIN")
+    p.add_argument("-o",  "--output",  metavar="DIR",  default="beast_output")
+    p.add_argument("-m",  "--mode",    metavar="N")
+    p.add_argument("-t",  "--types",   metavar="TYPES")
+    p.add_argument("--json-only",      action="store_true")
+    p.add_argument("-h",  "--help",    action="store_true")
     return p.parse_args()
 
-def _beastcrypt_only_error():
-    w     = tw()
-    inner = w - 2
-    blank = " " * inner
-    lines = [
-        f"{R}┌{'─'*inner}┐{RST}",
-        f"{R}│{RST}{blank}{R}│{RST}",
-        f"{R}│{RST}{R}{BLD}{'  ⚠  Run only  beastcrypt  command to use this tool':<{inner}}{RST}{R}│{RST}",
-        f"{R}│{RST}{DIM}{'  Usage :  beastcrypt':<{inner}}{RST}{R}│{RST}",
-        f"{R}│{RST}{blank}{R}│{RST}",
-        f"{R}└{'─'*inner}┘{RST}",
-    ]
-    print("\n" + "\n".join(lines) + "\n")
+def _usage_error():
+    print()
+    _sep(R)
+    print(f"  {R}{BLD}  Usage error  --  run:  beastcrypt{RST}")
+    _sep(R)
+    print()
     sys.exit(0)
 
 def main():
+    allowed_flags = {"-d","--domain","-o","--output","-m","--mode","-t","--types","--json-only"}
     if len(sys.argv) > 1:
-        allowed_flags = {"-d","--domain","-o","--output","-m","--mode","-t","--types","--json-only"}
         for a in sys.argv[1:]:
             if a.startswith("-") and a not in allowed_flags:
-                # --help ya koi bhi unknown flag → banner + beastcrypt only message
-                os.system("clear")
-                banner()
-                _beastcrypt_only_error()
+                os.system("clear"); banner(); _usage_error()
 
     banner()
     args = parse_cli()
 
     if len(sys.argv) > 1 and not (args.domain and args.mode):
-        _beastcrypt_only_error()
+        _usage_error()
 
     if args.domain and args.mode:
-        domain = args.domain
-        mode   = args.mode.strip()
-        out    = args.output
-
+        domain = args.domain; mode = args.mode.strip(); out = args.output
         exts_filter = None
         if args.types and args.types.lower() != "all":
             exts_filter = set()
             for t in args.types.split(","):
                 t = t.strip().lower()
-                if t in FILE_GROUPS:
-                    exts_filter.update(FILE_GROUPS[t]["exts"])
+                if t in FILE_GROUPS: exts_filter.update(FILE_GROUPS[t]["exts"])
 
         if   mode == "1": wayback_hunter(domain, exts_filter, out,
                                          save_files=not args.json_only,
                                          json_only=args.json_only)
         elif mode == "2": js_scanner_run(domain, out)
         elif mode == "3": full_beast_mode(domain, out)
-        else:             err(f"Unknown mode '{mode}' — valid values: 1, 2, 3")
+        else:             err(f"Unknown mode '{mode}'  --  valid: 1 / 2 / 3")
         return
 
     while True:
         choice = main_menu()
 
         if choice == "0":
-            print(f"\n  {Y}[!]{RST} Bye!\n"); sys.exit(0)
+            print(f"\n  {DIM}Exiting.{RST}\n"); sys.exit(0)
 
         elif choice == "1":
             domain     = get_domain_input()
             exts       = filetype_menu()
             out_fmt    = ask_output_format()
             output_dir = get_output_dir()
-            save_files = out_fmt in ("1", "3", "")
-            json_only  = out_fmt == "2"
+            os.system("clear"); banner()
             wayback_hunter(domain, exts, output_dir,
-                           save_files=save_files, json_only=json_only)
+                           save_files=out_fmt in ("1", "3", ""),
+                           json_only=out_fmt == "2")
 
         elif choice == "2":
             domain     = get_domain_input()
             output_dir = get_output_dir()
+            os.system("clear"); banner()
             js_scanner_run(domain, output_dir)
 
         elif choice == "3":
             domain     = get_domain_input()
             output_dir = get_output_dir()
+            os.system("clear"); banner()
             full_beast_mode(domain, output_dir)
 
         else:
-            warn("Invalid choice — try again."); continue
+            warn("Invalid choice."); continue
 
-        print(f"\n{R}{'═'*tw()}{RST}")
-        print(f"{R}{BLD}{'DONE — ALONE BEAST'.center(tw())}{RST}")
-        print(f"{R}{'═'*tw()}{RST}\n")
-        print(f"  {DIM}Press Enter to return to menu...{RST}")
+        print()
+        _sep(R)
+        print(f"{R}{BLD}{'  DONE  --  ALONE BEAST'.center(tw())}{RST}")
+        _sep(R)
+        print(f"\n  {DIM}Press Enter to return to menu ...{RST}")
         input()
+        os.system("clear"); banner()
 
 if __name__ == "__main__":
     main()
