@@ -1,4 +1,3 @@
-```markdown
 # BeastCrypt
 
 > v2.0 · JS & Source Map Secret Scanner · by alone_beast_02
