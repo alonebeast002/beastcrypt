@@ -7,9 +7,9 @@ with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     name             = "beastcrypt",
-    version          = "1.2.2",
+    version          = "1.2.4",
     author           = "ALONE BEAST",
-    author_email     = "ytthumbpro@gmail.com",
+    author_email     = "mishrachandan5512@gmail.com",
     description      = "Wayback Hunter + JS Secret Scanner — by ALONE BEAST",
     long_description = long_description,
     long_description_content_type = "text/markdown",
