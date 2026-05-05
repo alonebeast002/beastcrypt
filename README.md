@@ -1,6 +1,6 @@
 # BeastCrypt
 
-> v2.0 · JS & Source Map Secret Scanner · by alonebeast002
+> v1.2.3 · JS & Source Map Secret Scanner · by alonebeast002
 
 Terminal-based recon toolkit — hunt exposed secrets, API keys, and sensitive endpoints from live JavaScript files and source maps.
 
