@@ -1,24 +1,7 @@
----
+```markdown
+# BeastCrypt
 
-# beastcrypt
-
-```
-██████╗ ███████╗ █████╗ ███████╗████████╗
-██╔══██╗██╔════╝██╔══██╗██╔════╝╚══██╔══╝
-██████╔╝█████╗  ███████║███████╗   ██║
-██╔══██╗██╔══╝  ██╔══██║╚════██║   ██║
-██████╔╝███████╗██║  ██║███████║   ██║
-╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝
-██████╗██████╗ ██╗   ██╗██████╗ ████████╗
-██╔════╝██╔══██╗╚██╗ ██╔╝██╔══██╗╚══██╔══╝
-██║     ██████╔╝ ╚████╔╝ ██████╔╝   ██║
-██║     ██╔══██╗  ╚██╔╝  ██╔═══╝    ██║
-╚██████╗██║  ██║   ██║   ██║        ██║
- ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝
-
-  v2.0  ·  JS & Source Map Secret Scanner  ·  alone_beast_02
-  Secrets · Internal Paths · Source Maps · JS Hunter
-```
+> v2.0 · JS & Source Map Secret Scanner · by alone_beast_02
 
 Terminal-based recon toolkit — hunt exposed secrets, API keys, and sensitive endpoints from live JavaScript files and source maps.
 
@@ -37,7 +20,7 @@ Requires Python 3.8+. No external dependencies needed.
 ## Usage
 
 ```bash
-beastcrypt       # interactive menu (recommended)
+beastcrypt    # interactive menu (recommended)
 ```
 
 | Mode | Description |
@@ -68,20 +51,20 @@ beastcrypt       # interactive menu (recommended)
 | File | Contents |
 |------|----------|
 | `all_js_urls.txt` | All discovered JS asset URLs |
-| `results.json` | All found secrets with type, value, source, and timestamp |
+| `results.json` | Secrets with type, value, source, and timestamp |
 | `internal_paths.txt` | Extracted internal API paths and routes |
 
 ---
 
 ## How It Works
 
-1. Fetches the target URL and crawls for linked `.js` files
+1. Fetches target URL and crawls for linked `.js` files
 2. For each `.js` file, attempts to fetch its `.map` source map
 3. Scans all content with 20+ secret patterns using regex
 4. Extracts internal paths matching sensitive route patterns
 5. Saves everything to local output files in real time
 
-Supports up to 15 concurrent threads per scan batch. SSL verification is skipped to handle self-signed certs. Scan can be interrupted at any time with `Ctrl+C` — results are saved on exit.
+Supports 15 concurrent threads. SSL verification skipped for self-signed certs. Press `Ctrl+C` anytime to stop — results are saved on exit.
 
 ---
 
@@ -92,3 +75,4 @@ For authorized security testing and bug bounty research only. Always obtain perm
 ---
 
 **alone_beast_02** · [MIT](LICENSE)
+```
