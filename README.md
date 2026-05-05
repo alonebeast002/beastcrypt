@@ -74,4 +74,3 @@ For authorized security testing and bug bounty research only. Always obtain perm
 ---
 
 **alone_beast_02** · [MIT](LICENSE)
-```
