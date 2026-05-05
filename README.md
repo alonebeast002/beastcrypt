@@ -1,16 +1,26 @@
+---
+
 # beastcrypt
 
 ```
-  ██████╗ ███████╗ █████╗ ███████╗████████╗
-  ██╔══██╗██╔════╝██╔══██╗██╔════╝╚══██╔══╝
-  ██████╔╝█████╗  ███████║███████╗   ██║
-  ██╔══██╗██╔══╝  ██╔══██║╚════██║   ██║
-  ██████╔╝███████╗██║  ██║███████║   ██║
-  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝
-  ⬡  Wayback Hunter · JS Secret Scanner · v1.2 · by ALONE BEAST  ⬡
+██████╗ ███████╗ █████╗ ███████╗████████╗
+██╔══██╗██╔════╝██╔══██╗██╔════╝╚══██╔══╝
+██████╔╝█████╗  ███████║███████╗   ██║
+██╔══██╗██╔══╝  ██╔══██║╚════██║   ██║
+██████╔╝███████╗██║  ██║███████║   ██║
+╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝
+██████╗██████╗ ██╗   ██╗██████╗ ████████╗
+██╔════╝██╔══██╗╚██╗ ██╔╝██╔══██╗╚══██╔══╝
+██║     ██████╔╝ ╚████╔╝ ██████╔╝   ██║
+██║     ██╔══██╗  ╚██╔╝  ██╔═══╝    ██║
+╚██████╗██║  ██║   ██║   ██║        ██║
+ ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝
+
+  v2.0  ·  JS & Source Map Secret Scanner  ·  alone_beast_02
+  Secrets · Internal Paths · Source Maps · JS Hunter
 ```
 
-Terminal-based recon toolkit — hunt exposed secrets, API keys, and sensitive endpoints from archived and live JavaScript files.
+Terminal-based recon toolkit — hunt exposed secrets, API keys, and sensitive endpoints from live JavaScript files and source maps.
 
 ---
 
@@ -20,37 +30,65 @@ Terminal-based recon toolkit — hunt exposed secrets, API keys, and sensitive e
 pip install beastcrypt
 ```
 
-Requires Python 3.8+ and `curl`. Optional: [Katana](https://github.com/projectdiscovery/katana) at `~/go/bin/katana`.
+Requires Python 3.8+. No external dependencies needed.
 
 ---
 
 ## Usage
 
 ```bash
-beastcrypt       # interactive menu only (recommended)
-
+beastcrypt       # interactive menu (recommended)
 ```
 
 | Mode | Description |
 |------|-------------|
-| 1 | Wayback File Hunter — pull archived files by type |
-| 2 | JS Secret Scanner — scan live + archived JS for secrets |
-| 3 | Full Beast Mode — both combined |
-
-File types (`-t`): `js` `json` `pdf` `zip` `xml` `csv` `sql` `config` `html` `img` `map` `txt` `wasm` `all`
+| 1 | Single Target URL — deep crawl + source map extraction |
+| 2 | Subdomain List — scan multiple targets from a `.txt` file |
+| 3 | JS / .map URL List — direct secrets scan on provided URLs |
 
 ---
 
-## Detects
+## What It Detects
 
-AWS · Google API · GitHub · Slack · Stripe · Twilio · SendGrid · JWT · Private Keys · Bearer Tokens · DB URLs · S3 · Azure · Heroku · Telegram · Mapbox · NPM · GraphQL · Firebase · and more
+| Category | Examples |
+|----------|---------|
+| Cloud Keys | AWS Access/Secret Key, Azure Storage Key, Azure SAS Token |
+| Auth Tokens | JWT, Bearer Token, GitHub Token (`ghp_`, `github_pat_`) |
+| API Keys | Google API Key, Firebase Key, Generic API Key |
+| Payment | Stripe Live/Test Keys |
+| Messaging | Slack Token, SendGrid Key |
+| Generic | Passwords, Session Tokens, Access Tokens, Private Keys |
+| Infrastructure | Firebase URLs, Cloudinary URLs |
+| Internal Paths | Webpack paths, API routes, admin/internal endpoints |
+
+---
+
+## Output Files
+
+| File | Contents |
+|------|----------|
+| `all_js_urls.txt` | All discovered JS asset URLs |
+| `results.json` | All found secrets with type, value, source, and timestamp |
+| `internal_paths.txt` | Extracted internal API paths and routes |
+
+---
+
+## How It Works
+
+1. Fetches the target URL and crawls for linked `.js` files
+2. For each `.js` file, attempts to fetch its `.map` source map
+3. Scans all content with 20+ secret patterns using regex
+4. Extracts internal paths matching sensitive route patterns
+5. Saves everything to local output files in real time
+
+Supports up to 15 concurrent threads per scan batch. SSL verification is skipped to handle self-signed certs. Scan can be interrupted at any time with `Ctrl+C` — results are saved on exit.
 
 ---
 
 ## Disclaimer
 
-For authorized security testing and bug bounty research only.
+For authorized security testing and bug bounty research only. Always obtain permission before scanning any target.
 
 ---
 
-**ALONE BEAST** · HackerOne · Google VRP · [MIT](LICENSE)
+**alone_beast_02** · [MIT](LICENSE)
