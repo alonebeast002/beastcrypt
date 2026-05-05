@@ -15,78 +15,24 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 W, G, R, Y, C, M, RST, BLD, DIM = "\033[97m", "\033[92m", "\033[91m", "\033[93m", "\033[96m", "\033[95m", "\033[0m", "\033[1m", "\033[2m"
 
 SECRET_PATTERNS = {
-    "AWS Access Key": (
-        r'AKIA[0-9A-Z]{16}',
-        False
-    ),
-    "AWS Secret Key": (
-        r'(?i)aws[_\-\.]?secret[_\-\.]?(?:access[_\-\.]?)?key[\s]*[=:]+[\s]*[\'"]?([A-Za-z0-9/+=]{40})[\'"]?',
-        True
-    ),
-    "Google API Key": (
-        r'AIza[0-9A-Za-z\-_]{35}',
-        False
-    ),
-    "GitHub Token": (
-        r'ghp_[0-9a-zA-Z]{36}|github_pat_[0-9a-zA-Z_]{82}',
-        False
-    ),
-    "Slack Token": (
-        r'xox[baprs]-[0-9A-Za-z]{10,48}',
-        False
-    ),
-    "Stripe Key": (
-        r'(?:sk|pk)_(?:live|test)_[0-9a-zA-Z]{24,}',
-        False
-    ),
-    "Firebase URL": (
-        r'https://[a-z0-9\-]+\.firebaseio\.com',
-        False
-    ),
-    "Firebase Key": (
-        r'(?i)firebase[_\-\.]?(?:api[_\-\.]?)?key[\s]*[=:]+[\s]*[\'"]?([A-Za-z0-9\-_]{30,45})[\'"]?',
-        True
-    ),
-    "JWT Token": (
-        r'eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+',
-        False
-    ),
-    "Bearer Token": (
-        r'(?i)bearer\s+([A-Za-z0-9\-_\.]{30,})',
-        True
-    ),
-    "Generic API Key": (
-        r'(?i)(?:api[_\-\.]?key|apikey|api[_\-\.]?secret|app[_\-\.]?key)[\'"]?\s*[:=]\s*[\'"]([A-Za-z0-9\-_\.]{20,50})[\'"]',
-        True
-    ),
-    "Generic Token": (
-        r'(?i)(?:access[_\-\.]?token|auth[_\-\.]?token|session[_\-\.]?token)[\'"]?\s*[:=]\s*[\'"]([A-Za-z0-9\-_\.]{20,100})[\'"]',
-        True
-    ),
-    "Generic Password": (
-        r'(?i)(?:password|passwd|pwd)[\'"]?\s*[:=]\s*[\'"]([^\'"]{8,40})[\'"]',
-        True
-    ),
-    "Private Key": (
-        r'-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----',
-        False
-    ),
-    "Cloudinary URL": (
-        r'cloudinary://[0-9]{10,}:[A-Za-z0-9_\-]+@[A-Za-z0-9_\-]+',
-        False
-    ),
-    "Sendgrid Key": (
-        r'SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}',
-        False
-    ),
-    "Azure Storage Key": (
-        r'DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]{86,}',
-        False
-    ),
-    "Azure SAS Token": (
-        r'sv=\d{4}-\d{2}-\d{2}&s[a-z]=&se=[^&]+&sk=[^&]+&sig=[^&\s"\']+',
-        False
-    ),
+    "AWS Access Key": (r'AKIA[0-9A-Z]{16}', False),
+    "AWS Secret Key": (r'(?i)aws[_\-\.]?secret[_\-\.]?(?:access[_\-\.]?)?key[\s]*[=:]+[\s]*[\'"]?([A-Za-z0-9/+=]{40})[\'"]?', True),
+    "Google API Key": (r'AIza[0-9A-Za-z\-_]{35}', False),
+    "GitHub Token": (r'ghp_[0-9a-zA-Z]{36}|github_pat_[0-9a-zA-Z_]{82}', False),
+    "Slack Token": (r'xox[baprs]-[0-9A-Za-z]{10,48}', False),
+    "Stripe Key": (r'(?:sk|pk)_(?:live|test)_[0-9a-zA-Z]{24,}', False),
+    "Firebase URL": (r'https://[a-z0-9\-]+\.firebaseio\.com', False),
+    "Firebase Key": (r'(?i)firebase[_\-\.]?(?:api[_\-\.]?)?key[\s]*[=:]+[\s]*[\'"]?([A-Za-z0-9\-_]{30,45})[\'"]?', True),
+    "JWT Token": (r'eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+', False),
+    "Bearer Token": (r'(?i)bearer\s+([A-Za-z0-9\-_\.]{30,})', True),
+    "Generic API Key": (r'(?i)(?:api[_\-\.]?key|apikey|api[_\-\.]?secret|app[_\-\.]?key)[\'"]?\s*[:=]\s*[\'"]([A-Za-z0-9\-_\.]{20,50})[\'"]', True),
+    "Generic Token": (r'(?i)(?:access[_\-\.]?token|auth[_\-\.]?token|session[_\-\.]?token)[\'"]?\s*[:=]\s*[\'"]([A-Za-z0-9\-_\.]{20,100})[\'"]', True),
+    "Generic Password": (r'(?i)(?:password|passwd|pwd)[\'"]?\s*[:=]\s*[\'"]([^\'"]{8,40})[\'"]', True),
+    "Private Key": (r'-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----', False),
+    "Cloudinary URL": (r'cloudinary://[0-9]{10,}:[A-Za-z0-9_\-]+@[A-Za-z0-9_\-]+', False),
+    "Sendgrid Key": (r'SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}', False),
+    "Azure Storage Key": (r'DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]{86,}', False),
+    "Azure SAS Token": (r'sv=\d{4}-\d{2}-\d{2}&s[a-z]=&se=[^&]+&sk=[^&]+&sig=[^&\s"\']+', False),
 }
 
 INTERNAL_PATH_PATTERNS = [
@@ -96,38 +42,35 @@ INTERNAL_PATH_PATTERNS = [
 ]
 
 IGNORE_PATH_PATTERNS = [
-    r'^/{3,}',
-    r'^/{1,2}[*#!@]',
-    r'(?://){2,}',
-    r'[^\x20-\x7E]',
-    r'^https?://',
-    r'\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|css|html|htm|map|json)$',
+    r'^/{3,}', r'^/{1,2}[*#!@]', r'(?://){2,}', r'[^\x20-\x7E]',
+    r'^https?://', r'\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|css|html|htm|map|json)$',
     r'^/(?:static|assets|images|fonts|css|scss|media|vendor)[/\w]',
     r'node_modules/.+/node_modules',
 ]
 
 SKIP_SECRET_VALS = [
-    'undefined', 'null', 'true', 'false', 'example',
-    'placeholder', 'your_key', 'YOUR_KEY', 'xxxx', 'XXXX',
-    '****', 'test', 'demo', 'sample', 'changeme', 'insert',
-    'replace', 'here', 'value', 'string', 'key', 'secret'
+    'undefined', 'null', 'true', 'false', 'example', 'placeholder',
+    'your_key', 'YOUR_KEY', 'xxxx', 'XXXX', '****', 'test', 'demo',
+    'sample', 'changeme', 'insert', 'replace', 'here', 'value', 'string', 'key', 'secret'
 ]
 
 _interrupted = False
 found_urls_count = 0
 found_secrets_count = 0
 found_paths_count = 0
+_spinner_line = ""
+_spinner_lock = threading.Lock()
 
 
 def _sigint(sig, frame):
     global _interrupted
     _interrupted = True
-    print(f"\n{R}[!] Interrupted! Saving and exiting...{RST}")
+    sys.stdout.write("\n")
+    sys.stdout.flush()
     os._exit(0)
 
 signal.signal(signal.SIGINT, _sigint)
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def strip_ansi(text):
     return re.sub(r'\033\[[0-9;]*m', '', text)
@@ -144,64 +87,64 @@ def cprint(line):
     pad = " " * max(0, (cols - len(clean)) // 2)
     print(f"{pad}{line}")
 
-def center_block(lines):
+def print_block(lines):
     cols = get_cols()
-    out = []
+    max_clean = max(len(strip_ansi(l)) for l in lines)
+    pad = " " * max(0, (cols - max_clean) // 2)
     for line in lines:
-        clean = strip_ansi(line)
-        pad = " " * max(0, (cols - len(clean)) // 2)
-        out.append(pad + line)
-    return out
+        print(f"{pad}{line}")
 
 def print_sep(char="─", width=50):
     cols = get_cols()
     pad = " " * max(0, (cols - width) // 2)
     print(f"{pad}{BLD}{W}{char * width}{RST}")
 
-# ─── Banner ───────────────────────────────────────────────────────────────────
-#
-# Two-word banner "BEAST" + "CRYPT" stacked, each ~44 chars wide, pure green.
-# Split into two words so it stays compact and never wraps on narrow terminals.
-
 BANNER_BEAST = [
     f"{BLD}{G}██████╗ ███████╗ █████╗ ███████╗████████╗{RST}",
     f"{BLD}{G}██╔══██╗██╔════╝██╔══██╗██╔════╝╚══██╔══╝{RST}",
-    f"{BLD}{G}██████╔╝█████╗  ███████║███████╗   ██║{RST}   ",
-    f"{BLD}{G}██╔══██╗██╔══╝  ██╔══██║╚════██║   ██║{RST}   ",
-    f"{BLD}{G}██████╔╝███████╗██║  ██║███████║   ██║{RST}   ",
-    f"{BLD}{G}╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝{RST}  ",
+    f"{BLD}{G}██████╔╝█████╗  ███████║███████╗   ██║   {RST}",
+    f"{BLD}{G}██╔══██╗██╔══╝  ██╔══██║╚════██║   ██║   {RST}",
+    f"{BLD}{G}██████╔╝███████╗██║  ██║███████║   ██║   {RST}",
+    f"{BLD}{G}╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝  {RST}",
 ]
 
 BANNER_CRYPT = [
-    f"{BLD}{G}██████╗██████╗ ██╗   ██╗██████╗ ████████╗{RST}",
+    f"{BLD}{G} ██████╗██████╗ ██╗   ██╗██████╗ ████████╗{RST}",
     f"{BLD}{G}██╔════╝██╔══██╗╚██╗ ██╔╝██╔══██╗╚══██╔══╝{RST}",
-    f"{BLD}{G}██║     ██████╔╝ ╚████╔╝ ██████╔╝   ██║{RST}  ",
-    f"{BLD}{G}██║     ██╔══██╗  ╚██╔╝  ██╔═══╝    ██║{RST}  ",
-    f"{BLD}{G}╚██████╗██║  ██║   ██║   ██║        ██║{RST}  ",
-    f"{BLD}{G} ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝{RST} ",
+    f"{BLD}{G}██║     ██████╔╝ ╚████╔╝ ██████╔╝   ██║   {RST}",
+    f"{BLD}{G}██║     ██╔══██╗  ╚██╔╝  ██╔═══╝    ██║   {RST}",
+    f"{BLD}{G}╚██████╗██║  ██║   ██║   ██║        ██║   {RST}",
+    f"{BLD}{G} ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝  {RST}",
 ]
 
 def print_banner(animate=False):
+    all_lines = BANNER_BEAST + [""] + BANNER_CRYPT
+    cols = get_cols()
+    max_len = max(len(strip_ansi(l)) for l in all_lines if l != "")
+    pad = " " * max(0, (cols - max_len) // 2)
     print()
-    for line in center_block(BANNER_BEAST):
-        print(line)
-        if animate:
-            time.sleep(0.03)
-    print()
-    for line in center_block(BANNER_CRYPT):
-        print(line)
-        if animate:
-            time.sleep(0.03)
+    for line in all_lines:
+        if line == "":
+            print()
+        else:
+            print(f"{pad}{line}")
+            if animate:
+                time.sleep(0.03)
 
 def print_header():
+    line1 = "v2.0  ·  JS & Source Map Secret Scanner  ·  alone_beast_02"
+    line2 = "Secrets · Internal Paths · Source Maps · JS Hunter"
+    w = max(len(line1), len(line2))
+    cols = get_cols()
+    pad = " " * max(0, (cols - w) // 2)
+    sep = "─" * w
     print()
-    print_sep("─", 52)
-    cprint(f"{C}v2.0  ·  JS & Source Map Secret Scanner  ·  alone_beast_02{RST}")
-    cprint(f"{DIM}Secrets · Internal Paths · Source Maps · JS Hunter{RST}")
-    print_sep("─", 52)
+    print(f"{pad}{W}{sep}{RST}")
+    print(f"{pad}{C}{line1}{RST}")
+    print(f"{pad}{DIM}{line2}{RST}")
+    print(f"{pad}{W}{sep}{RST}")
     print()
 
-# ─── Spinner ─────────────────────────────────────────────────────────────────
 
 class LoadingSpinner:
     def __init__(self):
@@ -226,21 +169,24 @@ class LoadingSpinner:
             "Crawling webpack paths...",
         ]
 
+    def _render(self):
+        msg = self.messages[self.msg_idx % len(self.messages)]
+        spinner_char = self.chars[self.idx % 8]
+        # Plain text line — no padding issues
+        line = (
+            f"\r\033[2K"
+            f"{G}{spinner_char}{RST} "
+            f"{Y}{msg}{RST} "
+            f"| {W}Assets:{G}{found_urls_count}{RST}"
+            f" | {R}Secrets:{found_secrets_count}{RST}"
+            f" | {C}Paths:{found_paths_count}{RST}"
+        )
+        sys.stdout.write(line)
+        sys.stdout.flush()
+
     def spin(self):
-        cols = get_cols()
         while self.running:
-            msg = self.messages[self.msg_idx % len(self.messages)]
-            line = (
-                f"{G}{self.chars[self.idx % 8]}{RST} "
-                f"{Y}{msg}{RST} "
-                f"| {W}Assets:{G}{found_urls_count}{RST} "
-                f"| {R}Secrets:{found_secrets_count}{RST} "
-                f"| {C}Paths:{found_paths_count}{RST}"
-            )
-            clean_len = len(strip_ansi(line))
-            pad = " " * max(0, (cols - clean_len) // 2)
-            sys.stdout.write(f"\r{pad}{line}   ")
-            sys.stdout.flush()
+            self._render()
             self.idx += 1
             if self.idx % 30 == 0:
                 self.msg_idx += 1
@@ -248,13 +194,18 @@ class LoadingSpinner:
 
     def start(self):
         self.running = True
+        # Print empty line so spinner has a line to overwrite
+        sys.stdout.write("\n")
+        sys.stdout.flush()
         threading.Thread(target=self.spin, daemon=True).start()
 
     def stop(self):
         self.running = False
-        sys.stdout.write("\r" + " " * 160 + "\r")
+        time.sleep(0.2)
+        sys.stdout.write("\r\033[2K")
+        sys.stdout.flush()
+        print()
 
-# ─── File I/O ────────────────────────────────────────────────────────────────
 
 def save_secret(secret_data):
     with open("results.json", "a") as f:
@@ -267,8 +218,6 @@ def save_url(url):
 def save_path(path_data):
     with open("internal_paths.txt", "a") as f:
         f.write(json.dumps(path_data, indent=2) + "\n")
-
-# ─── Core Logic ──────────────────────────────────────────────────────────────
 
 def should_ignore_path(path):
     for pat in IGNORE_PATH_PATTERNS:
@@ -304,12 +253,7 @@ def scan_secrets(content, source_url):
             if any(s.lower() in val.lower() for s in SKIP_SECRET_VALS):
                 continue
             found_secrets_count += 1
-            save_secret({
-                "type": name,
-                "value": val,
-                "source": source_url,
-                "time": time.ctime()
-            })
+            save_secret({"type": name, "value": val, "source": source_url, "time": time.ctime()})
 
 def fetch_content(url):
     ctx = ssl.create_default_context()
@@ -393,46 +337,61 @@ def process_file_list(filepath):
                 process_content(url, content)
     spinner.stop()
 
-# ─── UI Screens ──────────────────────────────────────────────────────────────
-
 def show_coffee_animation():
-    """Coffee animation — shown only when scan is about to start."""
     os.system("clear")
     print_banner()
     print_header()
-
-    coffee_lines = [
-        f"{Y}   ( ({RST}     {W}Grab a coffee and wait...{RST}",
-        f"{Y}    ) ){RST}    {G}Loading secret patterns...{RST}",
-        f"{Y}  .......{RST}  {C}Warming up engines...{RST}",
-        f"{C}  | chai |]{RST} {Y}Ready for hunt! 😈{RST}",
-        f"{C}   \\    /{RST}",
+    art = [
+        f"{Y}   ( (   {RST}  {W}☕  Grab a coffee and wait...{RST}",
+        f"{Y}    ) )  {RST}  {G}    Loading secret patterns...{RST}",
+        f"{Y}  ......{RST}   {C}    Warming up engines...{RST}",
+        f"{C}  |    | {RST}  {Y}    Ready for hunt! 😈{RST}",
+        f"{C}   \\  / {RST}",
         f"{G}    `--'{RST}",
     ]
-    for line in center_block(coffee_lines):
-        print(line)
+    cols = get_cols()
+    max_len = max(len(strip_ansi(l)) for l in art)
+    art_pad = " " * max(0, (cols - max_len) // 2)
+    for line in art:
+        print(f"{art_pad}{line}")
         time.sleep(0.15)
-
     time.sleep(0.8)
     print()
     cprint(f"{G}[✓]{RST} {W}BeastCrypt Engines Fired! Scan Starting...{RST}")
     print()
     time.sleep(0.4)
 
-
 def show_intro():
-    """Home screen — banner + options only. No coffee box."""
     os.system("clear")
     print_banner(animate=True)
     print_header()
+    cols = get_cols()
+    box_w = 38
+    top = f"┌{'─' * box_w}┐"
+    mid = f"├{'─' * box_w}┤"
+    bot = f"└{'─' * box_w}┘"
+    title = "=[ OPTIONS ]="
+    t_pad = (box_w - len(title)) // 2
 
-    cprint(f"{BLD}{W}Select an option:{RST}")
-    print()
-    cprint(f"{G}1.{RST}  Single Target URL  {DIM}(deep crawl + source map){RST}")
-    cprint(f"{G}2.{RST}  Subdomain list     {DIM}(.txt file){RST}")
-    cprint(f"{G}3.{RST}  JS / .map URL list {DIM}(direct secrets scan){RST}")
-    print()
+    def bline(content):
+        clean_len = len(strip_ansi(content))
+        right = box_w - 2 - clean_len
+        return f"│ {content}{' ' * max(0, right)} │"
 
+    title_line = f"│{' ' * t_pad}{Y}{BLD}{title}{RST}{' ' * (box_w - t_pad - len(title))}│"
+    box = [
+        f"{W}{top}{RST}",
+        title_line,
+        f"{W}{mid}{RST}",
+        bline(f"  {G}{BLD}1.{RST}  Single Target   {DIM}(deep crawl){RST}"),
+        bline(f"  {C}{BLD}2.{RST}  Subdomain list  {DIM}(.txt scan){RST}"),
+        bline(f"  {M}{BLD}3.{RST}  JS / .map URL list scan{RST}"),
+        f"{W}{bot}{RST}",
+    ]
+    pad = " " * max(0, (cols - box_w - 2) // 2)
+    for bl in box:
+        print(f"{pad}{bl}")
+    print()
 
 def show_results():
     os.system("clear")
@@ -442,48 +401,36 @@ def show_results():
     print()
     cprint(f"{BLD}{M}BEASTCRYPT — HUNT COMPLETE 😈{RST}")
     print()
-
     stats = [
         f"{G}[✓]{RST}  JS Assets Found  :  {BLD}{G}{found_urls_count}{RST}",
         f"{R}[!]{RST}  Secrets Found    :  {BLD}{R}{found_secrets_count}{RST}",
         f"{C}[~]{RST}  Internal Paths   :  {BLD}{C}{found_paths_count}{RST}",
     ]
-    for s in stats:
-        cprint(s)
-
+    print_block(stats)
     print()
     print_sep("─", 52)
     print()
-
     files = [
         f"{Y}[📁]{RST}  JS URLs    →  {BLD}all_js_urls.txt{RST}",
         f"{R}[📁]{RST}  Secrets    →  {BLD}results.json{RST}",
         f"{C}[📁]{RST}  Int Paths  →  {BLD}internal_paths.txt{RST}",
     ]
-    for fi in files:
-        cprint(fi)
-
+    print_block(files)
     print()
     print_sep("─", 52)
     print()
-
     if found_secrets_count > 0:
         cprint(f"{R}{BLD}⚠  SECRETS FOUND! — PLEASE DO RESPONSIBLE DISCLOSURE!{RST}")
     else:
         cprint(f"{G}✓  No secrets found — target looks clean!{RST}")
     print()
 
-
-# ─── Main ────────────────────────────────────────────────────────────────────
-
 def main():
     show_intro()
-
-    # Centered input prompt
     cols = get_cols()
-    prompt_text = f"Selection [1/2/3]: "
+    prompt_text = "> Selection [1/2/3]: "
     pad = " " * max(0, (cols - len(prompt_text)) // 2)
-    choice = input(f"{pad}{G}Selection [{BLD}1/2/3{RST}{G}]: {RST}").strip()
+    choice = input(f"{pad}{G}>{RST} {BLD}{G}Selection [{W}1/2/3{G}]{RST}{G}: {RST}").strip()
 
     if choice == "1":
         url_prompt = "Enter URL: "
@@ -530,7 +477,6 @@ def main():
         return
 
     show_results()
-
 
 if __name__ == "__main__":
     main()
